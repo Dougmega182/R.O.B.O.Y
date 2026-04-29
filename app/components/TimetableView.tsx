@@ -29,12 +29,8 @@ type EntryForm = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const SLOTS = Array.from({ length: Math.ceil((16 * 60) / 5) }, (_, i) => {
-  const totalMinutes = (6 * 60) + (i * 5);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return { h, m };
-});
+const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
+const HOUR_HEIGHT = 80; // px per hour
 
 const COLORS = ["#EF4444", "#22C55E", "#F97316", "#3B82F6", "#EAB308", "#A855F7", "#06B6D4", "#EC4899"];
 
@@ -263,15 +259,22 @@ export default function TimetableView({ members }: { members: Member[] }) {
     }
   };
 
-  const getEntriesForSlot = (day: number, h: number, m: number) =>
-    entries.filter((entry) => {
-      if (entry.day_of_week !== day) return false;
-      const [eh, em] = entry.start_time.split(":").map(Number);
-      const entryTotal = (eh * 60) + em;
-      const slotTotal = (h * 60) + m;
-      // Entry matches this slot if it starts in this 5min window
-      return entryTotal >= slotTotal && entryTotal < slotTotal + 5;
-    });
+  const getEntriesForDay = (day: number) =>
+    entries.filter((entry) => entry.day_of_week === day);
+
+  const calculatePosition = (startTime: string, endTime: string) => {
+    const [sh, sm] = startTime.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    
+    const startTotal = (sh * 60) + sm;
+    const endTotal = (eh * 60) + em;
+    const baseTotal = 6 * 60; // Starts at 6am
+    
+    const top = ((startTotal - baseTotal) / 60) * HOUR_HEIGHT;
+    const height = ((endTotal - startTotal) / 60) * HOUR_HEIGHT;
+    
+    return { top, height };
+  };
 
   return (
     <div className="flex flex-col gap-6 h-full">
@@ -304,9 +307,9 @@ export default function TimetableView({ members }: { members: Member[] }) {
         </div>
       ) : null}
 
-      <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-auto">
-        <table className="w-full border-collapse">
-          <thead>
+      <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-auto relative">
+        <table className="w-full border-collapse table-fixed">
+          <thead className="sticky top-0 z-30 bg-white">
             <tr>
               <th className="w-20 p-2 border-b border-r border-gray-100 bg-gray-50/50" />
               {DAYS.map((day) => (
@@ -317,46 +320,63 @@ export default function TimetableView({ members }: { members: Member[] }) {
             </tr>
           </thead>
           <tbody>
-            {SLOTS.map(({ h, m }) => (
-              <tr key={`${h}:${m}`}>
-                <td className="p-1 border-r border-b border-gray-100 text-right align-middle">
-                  <span className={`text-[9px] font-bold ${m === 0 ? "text-gray-900 text-[10px]" : m % 15 === 0 ? "text-gray-400" : "text-gray-200"}`}>
-                    {m === 0 ? (h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`) : (m % 15 === 0 ? `${h}:${m}` : "·")}
-                  </span>
-                </td>
-                {DAYS.map((_, dayIndex) => {
-                  const slotEntries = getEntriesForSlot(dayIndex, h, m);
-                  return (
-                    <td
-                      key={dayIndex}
-                      className={`p-0.5 border-r border-b last:border-r-0 align-top min-h-[30px] min-w-[100px] transition-colors cursor-pointer ${m === 0 ? "border-gray-100" : "border-gray-50"} hover:bg-blue-50/20`}
-                      onClick={() => !showAdd && !editingEntry && openAddModal(dayIndex, h, m)}
-                    >
-                      {loading ? null : slotEntries.map((entry) => {
-                        const member = members.find((item) => item.id === entry.member_id);
-                        return (
-                          <button
-                            key={entry.id}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openEditModal(entry);
-                            }}
-                            className="w-full text-left text-[10px] font-black px-2 py-1.5 rounded-lg mb-1 flex items-center justify-between group/entry shadow-sm border border-black/10 transition-transform hover:scale-[1.02] active:scale-95"
-                            style={{ 
-                              backgroundColor: entry.color,
-                              color: ['#FBBC05', '#FF6D01', '#FFFFFF', '#BAFFC9', '#FFFFBA', '#FFDFBA', '#FFB3BA', '#EAB308', '#F97316'].includes(entry.color.toUpperCase()) ? '#000000' : '#ffffff'
-                            }}
-                          >
-                            <span className="truncate">{entry.title}{member ? ` · ${member.name}` : ""}</span>
-                            <span className="opacity-0 group-hover/entry:opacity-100 ml-1 text-[8px] uppercase tracking-tighter">Edit</span>
-                          </button>
-                        );
-                      })}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            <tr>
+              <td className="p-0 border-r border-gray-100 bg-gray-50/10">
+                {HOURS.map((h) => (
+                  <div key={h} style={{ height: HOUR_HEIGHT }} className="border-b border-gray-100 p-2 text-right">
+                    <span className="text-[10px] font-bold text-gray-400">
+                      {h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`}
+                    </span>
+                  </div>
+                ))}
+              </td>
+              {DAYS.map((_, dayIndex) => {
+                const dayEntries = getEntriesForDay(dayIndex);
+                return (
+                  <td key={dayIndex} className="p-0 border-r border-gray-100 last:border-r-0 relative bg-white align-top" style={{ height: HOURS.length * HOUR_HEIGHT }}>
+                    {/* Hour grid lines */}
+                    {HOURS.map((h) => (
+                      <div 
+                        key={h} 
+                        style={{ height: HOUR_HEIGHT }} 
+                        className="border-b border-gray-50 w-full hover:bg-blue-50/20 cursor-crosshair"
+                        onClick={() => !showAdd && !editingEntry && openAddModal(dayIndex, h, 0)}
+                      />
+                    ))}
+
+                    {/* Entries Layer */}
+                    {!loading && dayEntries.map((entry) => {
+                      const { top, height } = calculatePosition(entry.start_time, entry.end_time);
+                      const isShort = height < 40;
+                      
+                      return (
+                        <button
+                          key={entry.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEditModal(entry);
+                          }}
+                          className="absolute left-0.5 right-0.5 rounded-lg shadow-sm border border-black/10 transition-transform hover:scale-[1.01] active:scale-95 z-10 overflow-hidden flex flex-col p-1.5"
+                          style={{ 
+                            top: top + 2, 
+                            height: height - 4,
+                            backgroundColor: entry.color,
+                            color: ['#FBBC05', '#FF6D01', '#FFFFFF', '#BAFFC9', '#FFFFBA', '#FFDFBA', '#FFB3BA', '#EAB308', '#F97316'].includes(entry.color.toUpperCase()) ? '#000000' : '#ffffff'
+                          }}
+                        >
+                          <div className="text-[10px] font-black truncate leading-tight mb-0.5">
+                            {entry.title}
+                          </div>
+                          <div className={`text-[9px] font-bold opacity-80 ${isShort ? 'hidden' : 'block'}`}>
+                            {entry.start_time.slice(0, 5)} - {entry.end_time.slice(0, 5)}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </td>
+                );
+              })}
+            </tr>
           </tbody>
         </table>
       </div>
