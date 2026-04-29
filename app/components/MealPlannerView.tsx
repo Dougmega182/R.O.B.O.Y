@@ -229,9 +229,9 @@ export default function MealPlannerView() {
   }, [library, searchQuery]);
 
   return (
-    <div className="flex h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative">
-      {/* Sidebar */}
-      <div className="w-80 border-r border-gray-100 flex flex-col bg-gray-50/30 print:hidden">
+    <div className="flex flex-col md:flex-row h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative">
+      {/* Sidebar - Hidden on mobile by default, toggled via mode */}
+      <div className={`${mode === "library" ? "flex" : "hidden md:flex"} w-full md:w-80 border-r border-gray-100 flex-col bg-gray-50/30 print:hidden`}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
              <h2 className="text-xl font-black text-gray-800">🍱 {mode === "library" ? "All recipes" : "Meal Slots"}</h2>
@@ -297,29 +297,47 @@ export default function MealPlannerView() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col bg-white overflow-hidden">
+      <div className={`${mode === "library" ? "hidden md:flex" : "flex"} flex-1 flex flex-col bg-white overflow-hidden`}>
         {mode === "planner" ? (
-          <div className="flex-1 flex flex-col h-full print:hidden">
-            <div className="flex items-center justify-between px-10 py-8 border-b border-gray-50">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between px-6 md:px-10 py-6 md:py-8 border-b border-gray-50 gap-4">
                <div>
-                 <h2 className="text-3xl font-black text-gray-800 tracking-tight">{weekLabel}</h2>
+                 <h2 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">{weekLabel}</h2>
                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Household Meal Matrix</div>
                </div>
-               <div className="flex items-center gap-4">
-                  <div className="flex bg-gray-100 p-1 rounded-xl">
-                    <button onClick={() => setCurrentWeek(new Date(currentWeek.setDate(currentWeek.getDate() - 7)))} className="p-2 hover:bg-white rounded-lg transition-all text-gray-400 hover:text-gray-800">
+               <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="flex bg-gray-100 p-1 rounded-xl flex-1 md:flex-none">
+                    <button onClick={() => setCurrentWeek(new Date(currentWeek.setDate(currentWeek.getDate() - 7)))} className="flex-1 md:flex-none p-2 hover:bg-white rounded-lg transition-all text-gray-400 hover:text-gray-800">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="15 18 9 12 15 6"></polyline></svg>
                     </button>
-                    <button onClick={() => setCurrentWeek(getWeekStart(new Date()))} className="px-4 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gray-800">Today</button>
-                    <button onClick={() => setCurrentWeek(new Date(currentWeek.setDate(currentWeek.getDate() + 7)))} className="p-2 hover:bg-white rounded-lg transition-all text-gray-400 hover:text-gray-800">
+                    <button onClick={() => setCurrentWeek(getWeekStart(new Date()))} className="flex-1 md:flex-none px-4 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gray-800">Today</button>
+                    <button onClick={() => setCurrentWeek(new Date(currentWeek.setDate(currentWeek.getDate() + 7)))} className="flex-1 md:flex-none p-2 hover:bg-white rounded-lg transition-all text-gray-400 hover:text-gray-800">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="9 18 15 12 9 6"></polyline></svg>
                     </button>
                   </div>
                </div>
             </div>
-            <div className="flex-1 overflow-auto p-6">
+
+            {/* Mobile Day Picker */}
+            <div className="md:hidden flex bg-white border-b border-gray-100 p-2 overflow-x-auto no-scrollbar gap-2">
+              {weekDays.map((d, i) => {
+                const isToday = d.toDateString() === new Date().toDateString();
+                const isSelected = d.toISOString().split("T")[0] === (showAdd?.date || weekDays[0].toISOString().split("T")[0]); // Simplified
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setShowAdd({ date: d.toISOString().split("T")[0], meal_type: "dinner" })}
+                    className={`flex-shrink-0 w-12 h-16 rounded-2xl flex flex-col items-center justify-center transition-all ${isToday ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-50 text-gray-400'}`}
+                  >
+                    <div className="text-[9px] font-black uppercase tracking-tighter mb-1">{d.toLocaleDateString("en-AU", { weekday: "short" })}</div>
+                    <div className="text-lg font-black leading-none">{d.getDate()}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex-1 overflow-auto p-4 md:p-6">
               <table className="w-full border-separate border-spacing-2">
-                <thead>
+                <thead className="hidden md:table-header-group">
                   <tr>
                     <th className="w-24 p-2" />
                     {weekDays.map((d, i) => (
@@ -340,7 +358,7 @@ export default function MealPlannerView() {
                         const dateStr = d.toISOString().split("T")[0];
                         const slotMeals = meals.filter(m => m.date === dateStr && m.meal_type === type);
                         return (
-                          <td key={i} className="align-top min-h-[120px] min-w-[150px]">
+                      <td key={i} className={`align-top min-h-[120px] min-w-[150px] ${showAdd?.date === dateStr ? '' : 'hidden md:table-cell'}`}>
                             <div className="flex flex-col gap-2 p-3 bg-gray-50/50 rounded-2xl border border-transparent hover:border-blue-100 hover:bg-blue-50/30 transition-all group min-h-[100px]">
                               {slotMeals.map(m => (
                                 <button key={m.id} onClick={() => { 
@@ -437,7 +455,7 @@ export default function MealPlannerView() {
                 </div>
 
                 {/* Two Column: Ingredients + Instructions */}
-                <div className="grid grid-cols-2 gap-12">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                    {/* Ingredients */}
                    <div>
                       <h3 className="text-sm font-black text-gray-800 mb-4">Ingredients</h3>

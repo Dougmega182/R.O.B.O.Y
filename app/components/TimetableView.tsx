@@ -92,6 +92,7 @@ export default function TimetableView({ members }: { members: Member[] }) {
   const [importMemberId, setImportMemberId] = useState("");
   const [replaceMemberSchedule, setReplaceMemberSchedule] = useState(true);
   const [importSummary, setImportSummary] = useState("");
+  const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay() === 0 ? 6 : new Date().getDay() - 1); // 0-6, Mon-Sun
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -297,22 +298,35 @@ export default function TimetableView({ members }: { members: Member[] }) {
           <h2 className="text-xl font-bold text-gray-800">Weekly Timetable</h2>
           <p className="text-xs text-gray-400 mt-1">Upload a CSV or manage each activity directly in the grid.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
-            <button onClick={() => setSelectedMember("all")} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${selectedMember === "all" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
+          <div className="flex bg-gray-100 rounded-lg p-0.5 overflow-x-auto max-w-full no-scrollbar">
+            <button onClick={() => setSelectedMember("all")} className={`flex-shrink-0 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${selectedMember === "all" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
               Everyone
             </button>
             {members.map((member) => (
-              <button key={member.id} onClick={() => setSelectedMember(member.id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${selectedMember === member.id ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
+              <button key={member.id} onClick={() => setSelectedMember(member.id)} className={`flex-shrink-0 px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${selectedMember === member.id ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
                 <MemberAvatar avatar={member.avatar} color={member.color} className="w-4 h-4 rounded-full" textClassName="text-[8px] font-bold" alt={member.name} />
                 {member.name}
               </button>
             ))}
           </div>
-          <button onClick={() => setShowImport(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all">
+          <button onClick={() => setShowImport(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all w-full md:w-auto">
             Upload Timetable
           </button>
         </div>
+      </div>
+
+      {/* Mobile Day Picker */}
+      <div className="md:hidden flex bg-white border border-gray-100 rounded-2xl p-1 gap-1">
+        {DAYS.map((day, idx) => (
+          <button
+            key={day}
+            onClick={() => setSelectedDay(idx)}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-tighter transition-all ${selectedDay === idx ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-50'}`}
+          >
+            {day}
+          </button>
+        ))}
       </div>
 
       {importSummary ? (
@@ -325,9 +339,9 @@ export default function TimetableView({ members }: { members: Member[] }) {
         <table className="w-full border-collapse table-fixed">
           <thead className="sticky top-0 z-30 bg-white">
             <tr>
-              <th className="w-20 p-2 border-b border-r border-gray-100 bg-gray-50/50" />
-              {DAYS.map((day) => (
-                <th key={day} className="p-2 border-b border-r border-gray-100 last:border-r-0 bg-gray-50/50 text-center">
+              <th className="w-16 md:w-20 p-2 border-b border-r border-gray-100 bg-gray-50/50" />
+              {DAYS.map((day, idx) => (
+                <th key={day} className={`p-2 border-b border-r border-gray-100 last:border-r-0 bg-gray-50/50 text-center ${selectedDay === idx ? '' : 'hidden md:table-cell'}`}>
                   <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{day}</span>
                 </th>
               ))}
@@ -347,7 +361,7 @@ export default function TimetableView({ members }: { members: Member[] }) {
               {DAYS.map((_, dayIndex) => {
                 const dayEntries = getEntriesForDay(dayIndex);
                 return (
-                  <td key={dayIndex} className="p-0 border-r border-gray-100 last:border-r-0 relative bg-white align-top" style={{ height: HOURS.length * (HOUR_HEIGHT / 2) }}>
+                  <td key={dayIndex} className={`p-0 border-r border-gray-100 last:border-r-0 relative bg-white align-top ${selectedDay === dayIndex ? '' : 'hidden md:table-cell'}`} style={{ height: HOURS.length * (HOUR_HEIGHT / 2) }}>
                     {/* 30-min grid lines */}
                     {HOURS.map((slot) => (
                       <div 
