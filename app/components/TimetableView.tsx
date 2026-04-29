@@ -29,10 +29,24 @@ type EntryForm = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
-const HOUR_HEIGHT = 80; // px per hour
+const HOURS = Array.from({ length: 16 * 2 }, (_, i) => {
+  const totalMinutes = (6 * 60) + (i * 30);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return { h, m };
+});
+const HOUR_HEIGHT = 160; // Increased height significantly to prevent overlap and show text
 
-const COLORS = ["#EF4444", "#22C55E", "#F97316", "#3B82F6", "#EAB308", "#A855F7", "#06B6D4", "#EC4899"];
+const COLORS = [
+  "#dc2626", // Red 600
+  "#16a34a", // Green 600
+  "#ea580c", // Orange 600
+  "#2563eb", // Blue 600
+  "#ca8a04", // Yellow 600
+  "#9333ea", // Purple 600
+  "#0891b2", // Cyan 600
+  "#db2777", // Pink 600
+];
 
 const EMPTY_FORM: EntryForm = {
   title: "",
@@ -322,10 +336,10 @@ export default function TimetableView({ members }: { members: Member[] }) {
           <tbody>
             <tr>
               <td className="p-0 border-r border-gray-100 bg-gray-50/10">
-                {HOURS.map((h) => (
-                  <div key={h} style={{ height: HOUR_HEIGHT }} className="border-b border-gray-100 p-2 text-right">
+                {HOURS.map((slot) => (
+                  <div key={`${slot.h}:${slot.m}`} style={{ height: HOUR_HEIGHT / 2 }} className="border-b border-gray-100 p-2 text-right">
                     <span className="text-[10px] font-bold text-gray-400">
-                      {h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`}
+                      {slot.m === 0 ? (slot.h < 12 ? `${slot.h}am` : slot.h === 12 ? "12pm" : `${slot.h - 12}pm`) : `${slot.h}:${slot.m}`}
                     </span>
                   </div>
                 ))}
@@ -333,21 +347,21 @@ export default function TimetableView({ members }: { members: Member[] }) {
               {DAYS.map((_, dayIndex) => {
                 const dayEntries = getEntriesForDay(dayIndex);
                 return (
-                  <td key={dayIndex} className="p-0 border-r border-gray-100 last:border-r-0 relative bg-white align-top" style={{ height: HOURS.length * HOUR_HEIGHT }}>
-                    {/* Hour grid lines */}
-                    {HOURS.map((h) => (
+                  <td key={dayIndex} className="p-0 border-r border-gray-100 last:border-r-0 relative bg-white align-top" style={{ height: HOURS.length * (HOUR_HEIGHT / 2) }}>
+                    {/* 30-min grid lines */}
+                    {HOURS.map((slot) => (
                       <div 
-                        key={h} 
-                        style={{ height: HOUR_HEIGHT }} 
+                        key={`${slot.h}:${slot.m}`} 
+                        style={{ height: HOUR_HEIGHT / 2 }} 
                         className="border-b border-gray-50 w-full hover:bg-blue-50/20 cursor-crosshair"
-                        onClick={() => !showAdd && !editingEntry && openAddModal(dayIndex, h, 0)}
+                        onClick={() => !showAdd && !editingEntry && openAddModal(dayIndex, slot.h, slot.m)}
                       />
                     ))}
 
                     {/* Entries Layer */}
                     {!loading && dayEntries.map((entry) => {
                       const { top, height } = calculatePosition(entry.start_time, entry.end_time);
-                      const isShort = height < 40;
+                      const isShort = height < 25;
                       
                       return (
                         <button
@@ -356,18 +370,18 @@ export default function TimetableView({ members }: { members: Member[] }) {
                             event.stopPropagation();
                             openEditModal(entry);
                           }}
-                          className="absolute left-0.5 right-0.5 rounded-lg shadow-sm border border-black/10 transition-transform hover:scale-[1.01] active:scale-95 z-10 overflow-hidden flex flex-col p-1.5"
+                          className="absolute left-0.5 right-0.5 rounded-lg shadow-md border border-black/10 transition-transform hover:scale-[1.01] active:scale-95 z-10 overflow-hidden flex flex-col p-2"
                           style={{ 
                             top: top + 2, 
                             height: height - 4,
                             backgroundColor: entry.color,
-                            color: ['#FBBC05', '#FF6D01', '#FFFFFF', '#BAFFC9', '#FFFFBA', '#FFDFBA', '#FFB3BA', '#EAB308', '#F97316'].includes(entry.color.toUpperCase()) ? '#000000' : '#ffffff'
+                            color: '#ffffff' // Force white text for better contrast on solid colors
                           }}
                         >
-                          <div className="text-[10px] font-black truncate leading-tight mb-0.5">
+                          <div className={`text-[10px] font-black truncate leading-tight ${isShort ? 'mb-0' : 'mb-1'}`}>
                             {entry.title}
                           </div>
-                          <div className={`text-[9px] font-bold opacity-80 ${isShort ? 'hidden' : 'block'}`}>
+                          <div className={`text-[9px] font-bold opacity-90 ${isShort ? 'hidden' : 'block'}`}>
                             {entry.start_time.slice(0, 5)} - {entry.end_time.slice(0, 5)}
                           </div>
                         </button>
