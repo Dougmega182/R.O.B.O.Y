@@ -19,12 +19,14 @@ import ContactBookView from "@/components/ContactBookView";
 import OurPlacesView from "@/components/OurPlacesView";
 import MessageCenterView from "@/components/MessageCenterView";
 import RoutinesView from "@/components/RoutinesView";
+import MemberAvatar from "@/components/MemberAvatar";
+import ChatGPTView from "@/components/ChatGPTView";
 import { FeedItem, FeedStatus } from "@/lib/types/feed";
 import { Member, getHouseholdMembers } from "@/lib/members";
 import { createClient } from "@/lib/supabase/client";
 
 type UIStatus = "idle" | "saving" | "error";
-type View = "home" | "calendar" | "tasks" | "routines" | "lists" | "meals" | "budget" | "timetable" | "documents" | "gallery" | "contacts" | "places" | "messages" | "spotify" | "settings";
+type View = "home" | "calendar" | "tasks" | "routines" | "lists" | "meals" | "budget" | "timetable" | "documents" | "gallery" | "contacts" | "places" | "messages" | "spotify" | "chatgpt" | "settings";
 type HomeCardItem = {
   title: string;
   meta: string;
@@ -266,7 +268,7 @@ export default function Dashboard() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const view = params.get("view") as View;
-      if (view && ["home", "calendar", "tasks", "routines", "lists", "meals", "budget", "timetable", "documents", "gallery", "contacts", "places", "messages", "spotify", "settings"].includes(view)) {
+      if (view && ["home", "calendar", "tasks", "routines", "lists", "meals", "budget", "timetable", "documents", "gallery", "contacts", "places", "messages", "spotify", "chatgpt", "settings"].includes(view)) {
         setActiveView(view);
         if (view === "settings") setAdminUnlocked(true); // Auto-unlock for redirects if needed
       }
@@ -456,7 +458,7 @@ export default function Dashboard() {
           setIsHovered(false);
           if (!sidebarExpanded) setSidebarExpanded(false);
         }}
-        className={`bg-white border-r border-gray-100 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out z-50 ${
+        className={`bg-white border-r border-gray-100 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out z-50 print:hidden ${
           effectiveExpanded ? 'w-64 shadow-2xl' : 'w-20'
         }`}
       >
@@ -489,6 +491,7 @@ export default function Dashboard() {
             { id: "tasks" as View, label: "Chores", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> },
             { id: "routines" as View, label: "Routines", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> },
             { id: "messages" as View, label: "Chat", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg> },
+            { id: "chatgpt" as View, label: "Ask AI", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3l7 4v10l-7 4-7-4V7l7-4z"></path><path d="M9 12h6"></path><path d="M12 9v6"></path></svg> },
             { id: "contacts" as View, label: "Contacts", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> },
             { id: "places" as View, label: "Places", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> },
             { id: "gallery" as View, label: "Photos", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> },
@@ -517,16 +520,20 @@ export default function Dashboard() {
         </div>
 
         <div className={`mt-auto p-4 border-t border-gray-100 flex items-center transition-all ${effectiveExpanded ? 'gap-3' : 'justify-center'}`}>
-          <div className={`flex-shrink-0 w-10 h-10 ${currentMember.color} rounded-2xl text-white flex items-center justify-center text-xs font-bold shadow-sm`}>{currentMember.avatar}</div>
+          <MemberAvatar avatar={currentMember.avatar} color={currentMember.color} className="flex-shrink-0 w-10 h-10 rounded-2xl shadow-sm" textClassName="text-xs font-bold" alt={currentMember.name} />
           {effectiveExpanded && <div className="min-w-0 flex-1"><div className="text-xs font-black text-gray-800 truncate">{currentMember.name}</div><div className="text-[9px] font-bold text-gray-400 truncate uppercase tracking-tighter">{currentMember.role}</div></div>}
         </div>
       </nav>
 
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-8 shrink-0 relative">
+        <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-8 shrink-0 relative print:hidden">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-black text-[10px]">R</div>
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:block">Family Dashboard</div>
+            <button
+              onClick={() => setActiveView("chatgpt")}
+              className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-white transition-all hover:bg-black"
+            >
+              Ask ChatGPT
+            </button>
           </div>
           <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2">
             <div className="text-[16px] font-black text-blue-600 uppercase tracking-[0.4em] leading-none">R.O.B.O.Y</div>
@@ -539,7 +546,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 relative">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 relative print:p-0 print:overflow-visible">
           {/* Persistent Audio Node (Always mounted to prevent music stopping) */}
           <div className={activeView === "spotify" ? "h-full" : "hidden"}>
             <SpotifyView />
@@ -607,6 +614,7 @@ export default function Dashboard() {
           
           {activeView === "calendar" && <CalendarView members={members} />}
           {activeView === "messages" && <MessageCenterView members={members} initialConvId={targetConvId || undefined} />}
+          {activeView === "chatgpt" && <ChatGPTView />}
           {activeView === "tasks" && (
             <div className="flex flex-col gap-8 h-full">
                <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Relational Chore Matrix</h2>

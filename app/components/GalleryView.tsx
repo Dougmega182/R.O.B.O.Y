@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { Member } from "@/lib/members";
+import MemberAvatar from "./MemberAvatar";
 
 type Album = { id: string; name: string; icon: string; member_id?: string; gallery_photos?: { count: number }[] };
 type Photo = { id: string; url: string; caption?: string; created_at: string };
@@ -175,7 +176,7 @@ export default function GalleryView({ members }: { members: Member[] }) {
             {members.map(m => (
               <button key={m.id} onClick={() => { setSelectedAlbum(m.id); loadPhotos(m.id); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mb-1 transition-all ${selectedAlbum === m.id ? "bg-blue-50 text-blue-700 shadow-sm" : "hover:bg-gray-100 text-gray-600"}`}>
-                <div className={`w-8 h-8 rounded-lg ${m.color} text-white flex items-center justify-center text-[10px] font-bold`}>{m.avatar}</div>
+                <MemberAvatar avatar={m.avatar} color={m.color} className="w-8 h-8 rounded-lg" textClassName="text-[10px] font-bold" alt={m.name} />
                 <div>
                   <div className="text-xs font-bold">{m.name}</div>
                   <div className="text-[10px] opacity-60">No photo</div>
@@ -286,14 +287,14 @@ export default function GalleryView({ members }: { members: Member[] }) {
                            const { createClient } = await import("@/lib/supabase/client");
                            const supabase = createClient();
                            const origin = window.location.origin.replace('0.0.0.0', 'localhost');
-                           await supabase.auth.linkIdentity({ 
+                           await supabase.auth.signInWithOAuth({
                              provider: 'google',
                              options: {
                                redirectTo: `${origin}/auth/callback?provider=google&next=${encodeURIComponent('/?view=gallery')}`,
-                               scopes: 'openid email profile https://www.googleapis.com/auth/photoslibrary.readonly',
+                               scopes: 'openid email profile https://www.googleapis.com/auth/photoslibrary.readonly https://www.googleapis.com/auth/calendar.readonly',
                                queryParams: {
                                  access_type: 'offline',
-                                 prompt: 'consent'
+                                 prompt: 'consent select_account'
                                }
                              }
                            });

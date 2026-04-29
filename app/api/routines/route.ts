@@ -5,7 +5,10 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const supabase = createAdminClient();
   const { data, error } = await supabase.from("routines").select("*").order("created_at", { ascending: true });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("GET /api/routines Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(data ?? []);
 }
 
@@ -17,7 +20,10 @@ export async function POST(req: Request) {
   // Reset all routines
   if (action === "reset") {
     const { error } = await supabase.from("routines").update({ completed: false }).neq("id", "00000000-0000-0000-0000-000000000000");
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("POST /api/routines Reset Error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ success: true });
   }
 
@@ -27,7 +33,10 @@ export async function POST(req: Request) {
       .from("routines")
       .insert([{ name, assigned_to, completed: false }])
       .select().single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("POST /api/routines Create Error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     await logFeedItem({
       actorMemberId: assigned_to,
       type: "reminder",
@@ -47,7 +56,10 @@ export async function POST(req: Request) {
       .update({ completed })
       .eq("id", id)
       .select().single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("POST /api/routines Update Error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     if (completed && data) {
       await logFeedItem({
         actorMemberId: data.assigned_to,

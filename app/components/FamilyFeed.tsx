@@ -1,6 +1,7 @@
 "use client";
 
 import { FeedItem } from "@/lib/types/feed";
+import MemberAvatar from "./MemberAvatar";
 
 export default function FamilyFeed({ 
   items, 
@@ -21,9 +22,7 @@ export default function FamilyFeed({
         >
           <div className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full ${item.color} text-white flex items-center justify-center font-bold shadow-inner`}>
-                {item.avatar}
-              </div>
+              <MemberAvatar avatar={item.avatar} color={item.color} className="w-10 h-10 rounded-full shadow-inner" textClassName="font-bold" alt={item.actor} />
               <div>
                 <div className="font-bold text-sm text-gray-800">
                   {item.actor} • <span className="text-gray-400 font-normal uppercase text-[10px] tracking-tighter">{item.role}</span>
@@ -63,9 +62,7 @@ export default function FamilyFeed({
           
           <div className="px-4 py-2 border-t border-gray-50 flex items-center justify-between bg-gray-50/50">
              <div className="flex items-center gap-2">
-               <div className={`w-5 h-5 rounded-full ${item.color} opacity-30 flex items-center justify-center text-[8px] font-bold text-white`}>
-                 {item.avatar}
-               </div>
+               <MemberAvatar avatar={item.avatar} color={item.color} className="w-5 h-5 rounded-full opacity-30" textClassName="text-[8px] font-bold" alt={item.actor} />
                <div className="text-[10px] text-gray-300 italic font-medium">No comments yet</div>
              </div>
              <div className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">Detail View ➔</div>

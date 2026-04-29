@@ -1,12 +1,11 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 
 async function getAccessToken() {
   const { createClient, createAdminClient } = await import("@/lib/supabase/server");
   const supabase = createClient();
   const adminSupabase = createAdminClient();
-  
-  // 1. Try to get the household refresh token first as it's the most reliable for background sync
+
   const { data: setting } = await adminSupabase
     .from("household_settings")
     .select("value")
@@ -19,7 +18,9 @@ async function getAccessToken() {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: "Basic " + Buffer.from(process.env.SPOTIFY_CLIENT_ID + ":" + process.env.SPOTIFY_CLIENT_SECRET).toString("base64"),
+          Authorization:
+            "Basic " +
+            Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString("base64"),
         },
         body: new URLSearchParams({
           grant_type: "refresh_token",
@@ -35,18 +36,72 @@ async function getAccessToken() {
     }
   }
 
-  // 2. Fallback to the session provider token (user's personal connection)
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   if (session?.provider_token) return session.provider_token;
 
   return null;
+}
+
+async function fetchCurrentPlayback(token: string) {
+  const res = await fetch("https://api.spotify.com/v1/me/player?additional_types=track,episode", {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+
+  if (res.status === 204 || res.status === 404) {
+    return { playing: null };
+  }
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("Spotify API Error:", res.status, errText);
+    throw new Error(errText || "Spotify API Error");
+  }
+
+  const data = await res.json();
+  const isEpisode = data.currently_playing_type === "episode";
+
+  return {
+    playing: {
+      title: data.item?.name ?? "Unknown",
+      artist: isEpisode ? data.item?.show?.name ?? "Podcast" : data.item?.artists?.[0]?.name ?? "Unknown",
+      album: isEpisode ? data.item?.show?.publisher ?? "" : data.item?.album?.name ?? "",
+      albumArt: isEpisode
+        ? data.item?.images?.[0]?.url ?? data.item?.show?.images?.[0]?.url ?? ""
+        : data.item?.album?.images?.[0]?.url ?? "",
+      isPlaying: data.is_playing,
+      link: data.item?.external_urls?.spotify ?? "",
+      progressMs: data.progress_ms,
+      durationMs: data.item?.duration_ms,
+      device: data.device?.name,
+      deviceId: data.device?.id ?? null,
+      volumePercent: typeof data.device?.volume_percent === "number" ? data.device.volume_percent : null,
+      uri: data.item?.uri,
+    },
+  };
+}
+
+async function fetchRecentlyPlayed(token: string) {
+  const recentRes = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=10", {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+
+  if (!recentRes.ok) {
+    throw new Error("Failed to fetch recently played");
+  }
+
+  const recentData = await recentRes.json();
+  return recentData.items;
 }
 
 export async function GET(req: Request) {
   const token = await getAccessToken();
 
   if (!token) {
-    return NextResponse.json({ authenticated: false, playing: null });
+    return NextResponse.json({ authenticated: false, playing: null, recentlyPlayed: [] });
   }
 
   const { searchParams } = new URL(req.url);
@@ -56,78 +111,106 @@ export async function GET(req: Request) {
     return NextResponse.json({ authenticated: true, token });
   }
 
-  // --- ACTION: SEARCH ---
   if (action === "search") {
     const q = searchParams.get("q");
     if (!q) return NextResponse.json({ error: "Missing query" }, { status: 400 });
-    const searchRes = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track,album,artist&limit=5`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const searchRes = await fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track,album,artist&limit=5`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      }
+    );
     if (!searchRes.ok) return NextResponse.json({ error: "Search failed" }, { status: searchRes.status });
     const searchData = await searchRes.json();
     return NextResponse.json(searchData);
   }
 
-  // --- ACTION: RECENTLY PLAYED ---
   if (action === "recently_played") {
-    const recentRes = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=10", {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!recentRes.ok) return NextResponse.json({ error: "Failed to fetch recently played" }, { status: recentRes.status });
-    const recentData = await recentRes.json();
-    return NextResponse.json(recentData.items);
-  }
-
-  // --- DEFAULT: CURRENTLY PLAYING ---
-  const res = await fetch(
-    "https://api.spotify.com/v1/me/player?additional_types=track,episode",
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-
-  if (res.status === 204 || res.status === 404) {
-    return NextResponse.json({ authenticated: true, playing: null });
-  }
-
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("Spotify API Error:", res.status, errText);
-    return NextResponse.json({ error: "Spotify API Error", details: errText }, { status: res.status });
-  }
-
-  const data = await res.json();
-  const isEpisode = data.currently_playing_type === "episode";
-
-  return NextResponse.json({
-    authenticated: true,
-    playing: {
-      title: data.item?.name ?? "Unknown",
-      artist: isEpisode ? (data.item?.show?.name ?? "Podcast") : (data.item?.artists?.[0]?.name ?? "Unknown"),
-      album: isEpisode ? (data.item?.show?.publisher ?? "") : (data.item?.album?.name ?? ""),
-      albumArt: isEpisode ? (data.item?.images?.[0]?.url ?? data.item?.show?.images?.[0]?.url ?? "") : (data.item?.album?.images?.[0]?.url ?? ""),
-      isPlaying: data.is_playing,
-      link: data.item?.external_urls?.spotify ?? "",
-      progressMs: data.progress_ms,
-      durationMs: data.item?.duration_ms,
-      device: data.device?.name,
-      uri: data.item?.uri
+    try {
+      const items = await fetchRecentlyPlayed(token);
+      return NextResponse.json(items);
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message || "Failed to fetch recently played" }, { status: 500 });
     }
-  });
+  }
+
+  if (action === "overview") {
+    try {
+      const [playback, recent] = await Promise.all([fetchCurrentPlayback(token), fetchRecentlyPlayed(token)]);
+      return NextResponse.json({
+        authenticated: true,
+        playing: playback.playing,
+        recentlyPlayed: recent,
+      });
+    } catch (error: any) {
+      return NextResponse.json(
+        { error: error.message || "Spotify overview failed", authenticated: true, playing: null, recentlyPlayed: [] },
+        { status: 500 }
+      );
+    }
+  }
+
+  try {
+    const playback = await fetchCurrentPlayback(token);
+    return NextResponse.json({
+      authenticated: true,
+      playing: playback.playing,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: "Spotify API Error", details: error.message }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
   const token = await getAccessToken();
   if (!token) return NextResponse.json({ error: "No token" }, { status: 401 });
 
-  const { action, uri, deviceId } = await req.json();
-  
+  const { action, uri, deviceId, volumePercent } = await req.json();
+
+  if (action === "set_volume") {
+    const safeVolume = Math.max(0, Math.min(100, Number(volumePercent)));
+    if (!Number.isFinite(safeVolume)) {
+      return NextResponse.json({ error: "Invalid volume" }, { status: 400 });
+    }
+
+    let endpoint = `https://api.spotify.com/v1/me/player/volume?volume_percent=${Math.round(safeVolume)}`;
+    if (deviceId) {
+      endpoint += `&device_id=${encodeURIComponent(deviceId)}`;
+    }
+
+    const res = await fetch(endpoint, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      return NextResponse.json(
+        { error: "Spotify volume update failed", details: errorText || "Unknown Spotify error" },
+        { status: res.status }
+      );
+    }
+
+    return NextResponse.json({ success: true, volumePercent: Math.round(safeVolume) });
+  }
+
   let endpoint = "";
   let method = "PUT";
 
   switch (action) {
-    case "play": endpoint = "https://api.spotify.com/v1/me/player/play"; break;
-    case "pause": endpoint = "https://api.spotify.com/v1/me/player/pause"; break;
-    case "next": endpoint = "https://api.spotify.com/v1/me/player/next"; method = "POST"; break;
-    default: return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    case "play":
+      endpoint = "https://api.spotify.com/v1/me/player/play";
+      break;
+    case "pause":
+      endpoint = "https://api.spotify.com/v1/me/player/pause";
+      break;
+    case "next":
+      endpoint = "https://api.spotify.com/v1/me/player/next";
+      method = "POST";
+      break;
+    default:
+      return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
   const body = uri && action === "play" ? JSON.stringify({ uris: [uri] }) : undefined;
@@ -135,7 +218,7 @@ export async function POST(req: Request) {
 
   if (action === "play") {
     const devRes = await fetch("https://api.spotify.com/v1/me/player/devices", {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (devRes.ok) {
@@ -158,7 +241,7 @@ export async function POST(req: Request) {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           device_ids: [targetDeviceId],
@@ -178,11 +261,11 @@ export async function POST(req: Request) {
 
   let res = await fetch(endpoint, {
     method,
-    headers: { 
+    headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
-    body
+    body,
   });
 
   if ((res.status === 404 || res.status === 403) && action === "play" && deviceId) {
@@ -190,9 +273,9 @@ export async function POST(req: Request) {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      body
+      body,
     });
   }
 

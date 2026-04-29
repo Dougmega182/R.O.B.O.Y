@@ -96,15 +96,25 @@ async function saveFileAttachment(file: File, category: string) {
 }
 
 export async function POST(req: Request) {
-  const expectedToken = process.env.DOCUMENTS_INBOUND_TOKEN;
+  const expectedToken = process.env.DOCUMENTS_INBOUND_TOKEN?.trim();
 
   if (!expectedToken) {
     return NextResponse.json({ error: "DOCUMENTS_INBOUND_TOKEN is not configured." }, { status: 503 });
   }
 
-  const providedToken = getInboundToken(req);
+  const providedToken = getInboundToken(req)?.trim();
+  const allHeaders = Object.fromEntries(req.headers.entries());
+
   if (providedToken !== expectedToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.log("Unauthorized Inbound Attempt:", { 
+      provided: providedToken, 
+      expected: expectedToken,
+      providedLength: providedToken?.length,
+      expectedLength: expectedToken?.length,
+      match: providedToken === expectedToken,
+      hasHeader: !!allHeaders["x-documents-inbound-token"]
+    });
+    return NextResponse.json({ error: "Unauthorized", debug: "Check server logs" }, { status: 401 });
   }
 
   try {

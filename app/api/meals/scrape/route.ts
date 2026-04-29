@@ -118,10 +118,16 @@ export async function POST(req: Request) {
     }
 
     // 1c. Specialized Fallbacks for JS-rendered sites (Marley Spoon Fallback)
-    if (recipeData.ingredients.length === 0 || !recipeData.instructions) {
+    if (recipeData.ingredients.length === 0 || !recipeData.instructions || !recipeData.image) {
       // Marley Spoon DOM Fallback
       const msTitle = $('h1.dish-detail__title').text().trim();
       if (msTitle) recipeData.name = msTitle;
+
+      if (!recipeData.image) {
+        // Try specialized Marley Spoon hero image selectors
+        const msHero = $('.dish-detail__hero-image img, .recipe-image__wrapper img, img.recipe-image__img').first();
+        recipeData.image = msHero.attr('src') || msHero.attr('srcset')?.split(' ')[0] || recipeData.image;
+      }
 
       if (recipeData.ingredients.length === 0) {
         $('ul.recipe-ingredients__list li').each((_, el) => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Member } from "@/lib/members";
+import MemberAvatar from "./MemberAvatar";
 
 type Routine = {
   id: string;
@@ -32,15 +33,18 @@ export default function RoutinesView({ members }: { members: Member[] }) {
   }, [load]);
 
   const toggle = async (id: string, completed: boolean) => {
+    // Optimistic Update
     setRoutines(prev => prev.map(r => r.id === id ? { ...r, completed } : r));
     try {
-      await fetch("/api/routines", {
+      const res = await fetch("/api/routines", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, completed })
       });
+      if (!res.ok) throw new Error("Failed to toggle");
     } catch (err) {
       console.error("Failed to toggle routine:", err);
+      // Revert on error
       load();
     }
   };
@@ -88,9 +92,7 @@ export default function RoutinesView({ members }: { members: Member[] }) {
         {members.map(m => (
           <div key={m.id} className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
              <div className="p-5 bg-gray-50/50 border-b border-gray-100 flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-2xl ${m.color} text-white flex items-center justify-center font-bold text-lg shadow-inner`}>
-                  {m.avatar}
-                </div>
+                <MemberAvatar avatar={m.avatar} color={m.color} className="w-10 h-10 rounded-2xl shadow-inner" textClassName="font-bold text-lg" alt={m.name} />
                 <div>
                    <h3 className="font-black text-gray-800 text-[10px] tracking-[0.1em] uppercase">{m.name}</h3>
                    <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Habit Node</div>

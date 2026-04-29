@@ -18,6 +18,8 @@ export default function ContactBookView() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "", address: "", category: "Family", notes: "", avatar_url: "" });
@@ -62,6 +64,71 @@ export default function ContactBookView() {
     }
   };
 
+  const uploadAvatarFile = async (file?: File | null) => {
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      const uploadForm = new FormData();
+      uploadForm.append("file", file);
+
+      const res = await fetch("/api/contacts/avatar", {
+        method: "POST",
+        body: uploadForm,
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Avatar upload failed");
+      }
+
+      setForm((prev) => ({ ...prev, avatar_url: data.publicUrl || "" }));
+    } catch (err: any) {
+      console.error("Contact avatar upload failed:", err);
+      alert(err?.message || "Avatar upload failed");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const startEdit = (contact: Contact) => {
+    setForm({
+      name: contact.name || "",
+      phone: contact.phone || "",
+      email: contact.email || "",
+      address: contact.address || "",
+      category: contact.category || "Family",
+      notes: contact.notes || "",
+      avatar_url: contact.avatar_url || "",
+    });
+    setIsEditing(true);
+    setShowAdd(false);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedContact || !form.name.trim() || !form.phone.trim()) return;
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update", id: selectedContact.id, ...form }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to update contact");
+      }
+
+      const updated = await res.json();
+      setSelectedContact(updated);
+      setIsEditing(false);
+      await load();
+    } catch (err: any) {
+      console.error("Failed to update contact:", err);
+      alert(err?.message || "Failed to update contact");
+    }
+  };
+
   const filtered = contacts.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
     c.phone.includes(search)
@@ -96,7 +163,7 @@ export default function ContactBookView() {
               {filtered.map(c => (
                 <button 
                   key={c.id} 
-                  onClick={() => { setSelectedContact(c); setShowAdd(false); }}
+                  onClick={() => { setSelectedContact(c); setShowAdd(false); setIsEditing(false); }}
                   className={`w-full p-3 rounded-xl text-left transition-all group flex items-center gap-3 border ${
                     selectedContact?.id === c.id 
                       ? "bg-blue-600 border-blue-600 text-white shadow-lg" 
@@ -123,17 +190,17 @@ export default function ContactBookView() {
         </div>
 
         <div className="p-4 border-t border-gray-100">
-           <button onClick={() => { setShowAdd(true); setSelectedContact(null); }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">Add a contact</button>
+           <button onClick={() => { setShowAdd(true); setSelectedContact(null); setIsEditing(false); setForm({ name: "", phone: "", email: "", address: "", category: "Family", notes: "", avatar_url: "" }); }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">Add a contact</button>
         </div>
       </div>
 
       {/* Main Detail / Form Area */}
       <div className="flex-1 flex flex-col bg-white overflow-y-auto">
-        {showAdd ? (
+        {showAdd || isEditing ? (
           <div className="p-12">
             <div className="max-w-xl mx-auto bg-white rounded-3xl border border-gray-100 p-10 shadow-xl">
-               <h3 className="text-xl font-black text-gray-800 mb-8 uppercase tracking-widest text-center">New Household Contact</h3>
-               <form onSubmit={handleAdd} className="space-y-6">
+               <h3 className="text-xl font-black text-gray-800 mb-8 uppercase tracking-widest text-center">{isEditing ? "Edit Household Contact" : "New Household Contact"}</h3>
+               <form onSubmit={isEditing ? handleUpdate : handleAdd} className="space-y-6">
                   <div className="flex items-center justify-center mb-8">
                      <div className="w-24 h-24 bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-300 relative group overflow-hidden">
                         {form.avatar_url ? (
@@ -141,16 +208,18 @@ export default function ContactBookView() {
                         ) : (
                           <>
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8M8 12h8"></path></svg>
-                            <span className="text-[8px] font-black uppercase mt-1">Photo URL</span>
+                            <span className="text-[8px] font-black uppercase mt-1">Upload Photo</span>
                           </>
                         )}
-                        <input 
-                          type="url" 
-                          value={form.avatar_url}
-                          onChange={e => setForm({...form, avatar_url: e.target.value})}
-                          placeholder="Paste image URL..."
-                          className="absolute inset-0 opacity-0 cursor-pointer" 
-                        />
+                        <label className="absolute inset-0 cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => uploadAvatarFile(e.target.files?.[0])}
+                            disabled={avatarUploading}
+                          />
+                        </label>
                      </div>
                   </div>
 
@@ -181,9 +250,14 @@ export default function ContactBookView() {
                     </div>
                   </div>
                   <div className="flex gap-3 pt-4">
-                    <button type="submit" className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20">Save Contact</button>
-                    <button type="button" onClick={() => setShowAdd(false)} className="px-8 py-4 bg-gray-100 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</button>
+                    <button type="submit" className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20">{isEditing ? "Update Contact" : "Save Contact"}</button>
+                    <button type="button" onClick={() => { setShowAdd(false); setIsEditing(false); }} className="px-8 py-4 bg-gray-100 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</button>
                   </div>
+                  {avatarUploading && (
+                    <div className="text-center text-[10px] font-black uppercase tracking-widest text-blue-500">
+                      Uploading avatar...
+                    </div>
+                  )}
                </form>
             </div>
           </div>
@@ -199,7 +273,7 @@ export default function ContactBookView() {
                      </div>
                    )}
                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <button className="bg-white/90 backdrop-blur-sm text-gray-800 px-4 py-2 rounded-full text-[10px] font-black uppercase">Edit</button>
+                      <button onClick={() => startEdit(selectedContact)} className="bg-white/90 backdrop-blur-sm text-gray-800 px-4 py-2 rounded-full text-[10px] font-black uppercase">Edit</button>
                    </div>
                 </div>
 

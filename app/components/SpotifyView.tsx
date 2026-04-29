@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 declare global {
   interface Window {
@@ -20,11 +20,27 @@ type SpotifyPlayer = {
   connect: () => Promise<boolean>;
   disconnect: () => void;
   activateElement?: () => Promise<void>;
+  setVolume?: (volume: number) => Promise<void>;
+};
+
+type PlayingState = {
+  title: string;
+  artist: string;
+  album: string;
+  albumArt: string;
+  isPlaying: boolean;
+  link: string;
+  progressMs: number;
+  durationMs: number;
+  device?: string;
+  deviceId?: string | null;
+  volumePercent?: number | null;
+  uri?: string;
 };
 
 export default function SpotifyView() {
   const [loading, setLoading] = useState(true);
-  const [playing, setPlaying] = useState<any>(null);
+  const [playing, setPlaying] = useState<PlayingState | null>(null);
   const [recentlyPlayed, setRecentlyPlayed] = useState<any[]>([]);
   const [authenticated, setAuthenticated] = useState(false);
   const [sdkReady, setSdkReady] = useState(false);
@@ -33,27 +49,26 @@ export default function SpotifyView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [volumePercent, setVolumePercent] = useState(80);
+  const [isAdjustingVolume, setIsAdjustingVolume] = useState(false);
+  const playerRef = useRef<SpotifyPlayer | null>(null);
+  const volumeCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      // Load current playback
-      const res = await fetch(`/api/spotify?_t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAuthenticated(Boolean(data.authenticated));
-        setPlaying(data.playing);
-      } else {
-        setAuthenticated(false);
-        setPlaying(null);
-      }
+      const res = await fetch(`/api/spotify?action=overview&_t=${Date.now()}`);
+      const data = await res.json();
 
-      // Load recently played
-      const recentRes = await fetch(`/api/spotify?action=recently_played&_t=${Date.now()}`);
-      if (recentRes.ok) {
-        const recentData = await recentRes.json();
-        // Spotify returns duplicate items sometimes, filter them
-        const unique = Array.from(new Map(recentData.map((item: any) => [item.track.id, item])).values());
-        setRecentlyPlayed(unique as any[]);
+      setAuthenticated(Boolean(data.authenticated));
+      setPlaying(data.playing || null);
+
+      const unique = Array.from(
+        new Map(((data.recentlyPlayed || []) as any[]).map((item: any) => [item.track.id, item])).values()
+      );
+      setRecentlyPlayed(unique as any[]);
+
+      if (typeof data.playing?.volumePercent === "number") {
+        setVolumePercent(data.playing.volumePercent);
       }
     } catch (err) {
       console.error("Spotify Data Sync Error:", err);
@@ -64,13 +79,12 @@ export default function SpotifyView() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 10000); // Check every 10s
+    const interval = setInterval(loadData, 15000);
     return () => clearInterval(interval);
   }, [loadData]);
 
   useEffect(() => {
     let isCancelled = false;
-    let player: SpotifyPlayer | null = null;
 
     const bootPlayer = async () => {
       if (typeof window === "undefined") return;
@@ -96,7 +110,7 @@ export default function SpotifyView() {
       await ensureScript();
       if (isCancelled || !window.Spotify) return;
 
-      player = new window.Spotify.Player({
+      const player = new window.Spotify.Player({
         name: "FamilyWall Player",
         getOAuthToken: async (cb) => {
           const res = await fetch("/api/spotify?action=sdk_token");
@@ -106,12 +120,14 @@ export default function SpotifyView() {
         volume: 0.8,
       });
 
+      playerRef.current = player;
+
       player.addListener("ready", async ({ device_id }: { device_id: string }) => {
         if (isCancelled) return;
         setBrowserDeviceId(device_id);
         setSdkReady(true);
         setPlayerError(null);
-        if (player?.activateElement) {
+        if (player.activateElement) {
           try {
             await player.activateElement();
           } catch {}
@@ -141,7 +157,9 @@ export default function SpotifyView() {
 
     return () => {
       isCancelled = true;
-      if (player) player.disconnect();
+      if (volumeCommitTimer.current) clearTimeout(volumeCommitTimer.current);
+      if (playerRef.current) playerRef.current.disconnect();
+      playerRef.current = null;
     };
   }, []);
 
@@ -156,7 +174,7 @@ export default function SpotifyView() {
         const res = await fetch(`/api/spotify?action=search&q=${encodeURIComponent(searchQuery)}`);
         const data = await res.json();
         setSearchResults(data.tracks?.items || []);
-      } catch (err) {}
+      } catch {}
       setIsSearching(false);
     }, 500);
     return () => clearTimeout(delayDebounceFn);
@@ -166,7 +184,7 @@ export default function SpotifyView() {
     const res = await fetch("/api/spotify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "play", uri, deviceId: browserDeviceId })
+      body: JSON.stringify({ action: "play", uri, deviceId: browserDeviceId }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -180,7 +198,7 @@ export default function SpotifyView() {
     const res = await fetch("/api/spotify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "pause" })
+      body: JSON.stringify({ action: "pause" }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -194,7 +212,7 @@ export default function SpotifyView() {
     const res = await fetch("/api/spotify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "next" })
+      body: JSON.stringify({ action: "next" }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -204,10 +222,42 @@ export default function SpotifyView() {
     setTimeout(loadData, 1000);
   };
 
+  const commitVolume = useCallback(
+    async (nextVolume: number) => {
+      setIsAdjustingVolume(true);
+      try {
+        if (playerRef.current?.setVolume) {
+          await playerRef.current.setVolume(nextVolume / 100);
+        }
+
+        await fetch("/api/spotify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "set_volume",
+            volumePercent: nextVolume,
+            deviceId: playing?.deviceId || browserDeviceId,
+          }),
+        });
+      } catch (err) {
+        console.error("Spotify volume update failed:", err);
+      } finally {
+        setIsAdjustingVolume(false);
+      }
+    },
+    [browserDeviceId, playing?.deviceId]
+  );
+
+  const handleVolumeChange = (nextVolume: number) => {
+    setVolumePercent(nextVolume);
+    if (volumeCommitTimer.current) clearTimeout(volumeCommitTimer.current);
+    volumeCommitTimer.current = setTimeout(() => {
+      commitVolume(nextVolume);
+    }, 180);
+  };
+
   return (
     <div className="w-full h-full flex flex-col gap-6 font-sans animate-in fade-in duration-500">
-      
-      {/* Header */}
       <div className="flex items-center justify-between bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl shadow-gray-200/20">
         <div className="flex items-center gap-5">
           <div className="w-14 h-14 bg-[#1DB954] text-white rounded-2xl flex items-center justify-center shadow-2xl shadow-[#1DB954]/40 relative overflow-hidden group">
@@ -222,11 +272,11 @@ export default function SpotifyView() {
           <div className={`px-3 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest ${sdkReady ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>
             {sdkReady ? "Browser Player Ready" : "Connecting Player"}
           </div>
-          <input 
-            type="text" 
-            placeholder="Search Spotify Catalog..." 
+          <input
+            type="text"
+            placeholder="Search Spotify Catalog..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="px-6 py-3 bg-gray-50 border border-gray-200 rounded-2xl w-96 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1DB954]/50 shadow-inner"
           />
         </div>
@@ -239,14 +289,13 @@ export default function SpotifyView() {
       )}
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)] overflow-hidden">
-        
-        {/* Left Column: Search & Recently Played */}
         <div className="lg:col-span-2 bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-y-auto p-8 flex flex-col gap-8 custom-scrollbar">
-          
           {searchQuery ? (
             <div>
               <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mb-4">Search Results</h3>
-              {isSearching ? <div className="animate-pulse text-sm text-gray-500">Searching...</div> : (
+              {isSearching ? (
+                <div className="animate-pulse text-sm text-gray-500">Searching...</div>
+              ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {searchResults.map((track: any) => (
                     <div key={track.id} className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-xl transition-colors group cursor-pointer" onClick={() => handlePlay(track.uri)}>
@@ -282,57 +331,84 @@ export default function SpotifyView() {
               </div>
             </div>
           )}
-
         </div>
 
-        {/* Right Column: Currently Playing */}
         <div className="bg-black rounded-[2rem] border border-gray-800 shadow-2xl p-8 flex flex-col justify-end relative overflow-hidden text-white">
           {playing?.albumArt && (
             <div className="absolute inset-0 opacity-40 mix-blend-overlay">
               <img src={playing.albumArt} alt="" className="w-full h-full object-cover blur-2xl scale-150" />
             </div>
           )}
-          
+
           <div className="relative z-10 flex flex-col gap-6">
             {playing ? (
               <>
                 <div className="text-[10px] font-black text-[#1DB954] uppercase tracking-widest flex items-center gap-2">
                   <div className="w-2 h-2 bg-[#1DB954] rounded-full animate-pulse" />
-                  Now Playing on {playing.device || 'Cloud'}
+                  Now Playing on {playing.device || "Cloud"}
                 </div>
-                
+
                 <img src={playing.albumArt} alt="" className="w-full aspect-square object-cover rounded-2xl shadow-2xl mb-4" />
-                
+
                 <div>
                   <h3 className="font-black text-2xl truncate leading-none mb-2">{playing.title}</h3>
                   <p className="text-gray-400 font-medium truncate">{playing.artist}</p>
                 </div>
 
-                {/* Progress */}
                 {playing.durationMs > 0 && (
                   <div className="flex flex-col gap-2">
                     <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-white rounded-full transition-all duration-1000 ease-linear"
                         style={{ width: `${(playing.progressMs / playing.durationMs) * 100}%` }}
                       />
                     </div>
                     <div className="flex justify-between text-[9px] font-bold text-gray-500">
-                      <span>{Math.floor(playing.progressMs / 60000)}:{(Math.floor((playing.progressMs % 60000) / 1000)).toString().padStart(2, '0')}</span>
-                      <span>{Math.floor(playing.durationMs / 60000)}:{(Math.floor((playing.durationMs % 60000) / 1000)).toString().padStart(2, '0')}</span>
+                      <span>{Math.floor(playing.progressMs / 60000)}:{(Math.floor((playing.progressMs % 60000) / 1000)).toString().padStart(2, "0")}</span>
+                      <span>{Math.floor(playing.durationMs / 60000)}:{(Math.floor((playing.durationMs % 60000) / 1000)).toString().padStart(2, "0")}</span>
                     </div>
                   </div>
                 )}
 
-                {/* Controls */}
+                <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Volume</span>
+                    <span className="text-[10px] font-black text-white">{volumePercent}%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleVolumeChange(Math.max(0, volumePercent - 10))}
+                      className="w-9 h-9 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={volumePercent}
+                      onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                      className="flex-1 accent-[#1DB954]"
+                    />
+                    <button
+                      onClick={() => handleVolumeChange(Math.min(100, volumePercent + 10))}
+                      className="w-9 h-9 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {isAdjustingVolume && <div className="mt-2 text-[9px] text-gray-400">Updating volume…</div>}
+                </div>
+
                 <div className="flex items-center justify-center gap-6 mt-2">
                   <button onClick={playing.isPlaying ? handlePause : () => handlePlay()} className="w-16 h-16 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                      {playing.isPlaying ? <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/> : <path d="M8 5v14l11-7z"/>}
+                      {playing.isPlaying ? <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /> : <path d="M8 5v14l11-7z" />}
                     </svg>
                   </button>
                   <button onClick={handleSkip} className="w-12 h-12 bg-white/10 text-white rounded-full flex items-center justify-center hover:bg-white/20 active:scale-95 transition-all">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
                   </button>
                 </div>
               </>

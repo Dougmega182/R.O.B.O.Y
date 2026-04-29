@@ -21,7 +21,10 @@ export async function POST(req: Request) {
 
   if (body.action === "delete") {
     const { error } = await supabase.from("recipes").delete().eq("id", body.id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("DELETE /api/recipes Error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ success: true });
   }
 

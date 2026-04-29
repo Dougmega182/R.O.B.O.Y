@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Member } from "@/lib/members";
+import MemberAvatar from "./MemberAvatar";
 
 type Template = { id: string; name: string; reward: number };
 
@@ -120,7 +121,7 @@ export default function ChoreLibrary({ members }: { members: Member[] }) {
                        className={`w-6 h-6 rounded-lg ${m.color} text-white flex items-center justify-center text-[8px] font-black hover:scale-110 active:scale-95 transition-all shadow-sm`}
                        title={`Deploy to ${m.name}`}
                      >
-                       {m.avatar}
+                       <MemberAvatar avatar={m.avatar} color={m.color} className="w-6 h-6 rounded-lg" textClassName="text-[8px] font-black" alt={m.name} />
                      </button>
                    ))}
                  </div>

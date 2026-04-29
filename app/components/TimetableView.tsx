@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Member } from "@/lib/members";
+import MemberAvatar from "./MemberAvatar";
 
 type Entry = {
   id: string;
@@ -28,7 +29,13 @@ type EntryForm = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
+const SLOTS = Array.from({ length: 16 * 4 }, (_, i) => {
+  const totalMinutes = (6 * 60) + (i * 15);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return { h, m };
+});
+
 const COLORS = ["#4285f4", "#ea4335", "#34a853", "#fbbc05", "#ff6d01", "#46bdc6", "#7b1fa2", "#e91e63"];
 
 const EMPTY_FORM: EntryForm = {
@@ -67,7 +74,7 @@ export default function TimetableView({ members }: { members: Member[] }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<string>("all");
-  const [showAdd, setShowAdd] = useState<{ day: number; hour: number } | null>(null);
+  const [showAdd, setShowAdd] = useState<{ day: number; hour: number; minute: number } | null>(null);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -97,15 +104,19 @@ export default function TimetableView({ members }: { members: Member[] }) {
 
   const resetForm = () => setForm(EMPTY_FORM);
 
-  const openAddModal = (day: number, hour: number) => {
+  const openAddModal = (day: number, hour: number, minute: number) => {
     setEditingEntry(null);
+    const start = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    const nextTotal = (hour * 60) + minute + 30;
+    const end = `${String(Math.floor(nextTotal / 60)).padStart(2, "0")}:${String(nextTotal % 60).padStart(2, "0")}`;
+    
     setForm({
       ...EMPTY_FORM,
       day_of_week: day,
-      start_time: `${String(hour).padStart(2, "0")}:00`,
-      end_time: `${String(Math.min(hour + 1, 23)).padStart(2, "0")}:00`,
+      start_time: start,
+      end_time: end,
     });
-    setShowAdd({ day, hour });
+    setShowAdd({ day, hour, minute });
   };
 
   const openEditModal = (entry: Entry) => {
@@ -252,8 +263,13 @@ export default function TimetableView({ members }: { members: Member[] }) {
     }
   };
 
-  const getEntriesForSlot = (day: number, hour: number) =>
-    entries.filter((entry) => entry.day_of_week === day && parseInt(entry.start_time, 10) === hour);
+  const getEntriesForSlot = (day: number, h: number, m: number) =>
+    entries.filter((entry) => {
+      if (entry.day_of_week !== day) return false;
+      const [eh, em] = entry.start_time.split(":").map(Number);
+      // Entry matches this slot if it starts in this 15min window
+      return eh === h && em >= m && em < m + 15;
+    });
 
   return (
     <div className="flex flex-col gap-6 h-full">
@@ -269,7 +285,7 @@ export default function TimetableView({ members }: { members: Member[] }) {
             </button>
             {members.map((member) => (
               <button key={member.id} onClick={() => setSelectedMember(member.id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${selectedMember === member.id ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
-                <div className={`w-4 h-4 rounded-full ${member.color} text-white text-[8px] flex items-center justify-center font-bold`}>{member.avatar?.slice(0, 1)}</div>
+                <MemberAvatar avatar={member.avatar} color={member.color} className="w-4 h-4 rounded-full" textClassName="text-[8px] font-bold" alt={member.name} />
                 {member.name}
               </button>
             ))}
@@ -290,7 +306,7 @@ export default function TimetableView({ members }: { members: Member[] }) {
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="w-16 p-2 border-b border-r border-gray-100 bg-gray-50/50" />
+              <th className="w-20 p-2 border-b border-r border-gray-100 bg-gray-50/50" />
               {DAYS.map((day) => (
                 <th key={day} className="p-2 border-b border-r border-gray-100 last:border-r-0 bg-gray-50/50 text-center">
                   <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{day}</span>
@@ -299,18 +315,20 @@ export default function TimetableView({ members }: { members: Member[] }) {
             </tr>
           </thead>
           <tbody>
-            {HOURS.map((hour) => (
-              <tr key={hour}>
-                <td className="p-1.5 border-r border-b border-gray-100 text-right align-top">
-                  <span className="text-[10px] font-medium text-gray-400">{hour < 12 ? `${hour}am` : hour === 12 ? "12pm" : `${hour - 12}pm`}</span>
+            {SLOTS.map(({ h, m }) => (
+              <tr key={`${h}:${m}`}>
+                <td className="p-1.5 border-r border-b border-gray-100 text-right align-middle">
+                  <span className={`text-[10px] font-bold ${m === 0 ? "text-gray-600" : "text-gray-300"}`}>
+                    {m === 0 ? (h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`) : `${h}:${m}`}
+                  </span>
                 </td>
                 {DAYS.map((_, dayIndex) => {
-                  const slotEntries = getEntriesForSlot(dayIndex, hour);
+                  const slotEntries = getEntriesForSlot(dayIndex, h, m);
                   return (
                     <td
                       key={dayIndex}
-                      className="p-0.5 border-r border-b border-gray-50 last:border-r-0 align-top min-h-[40px] min-w-[100px] hover:bg-blue-50/20 transition-colors cursor-pointer"
-                      onClick={() => !showAdd && !editingEntry && openAddModal(dayIndex, hour)}
+                      className={`p-0.5 border-r border-b last:border-r-0 align-top min-h-[30px] min-w-[100px] transition-colors cursor-pointer ${m === 0 ? "border-gray-100" : "border-gray-50"} hover:bg-blue-50/20`}
+                      onClick={() => !showAdd && !editingEntry && openAddModal(dayIndex, h, m)}
                     >
                       {loading ? null : slotEntries.map((entry) => {
                         const member = members.find((item) => item.id === entry.member_id);
@@ -321,11 +339,15 @@ export default function TimetableView({ members }: { members: Member[] }) {
                               event.stopPropagation();
                               openEditModal(entry);
                             }}
-                            className="w-full text-left text-white text-[10px] font-semibold px-1.5 py-1 rounded mb-0.5 flex items-center justify-between group/entry"
-                            style={{ backgroundColor: entry.color }}
+                            className="w-full text-left text-[10px] font-black px-2 py-1.5 rounded-lg mb-1 flex items-center justify-between group/entry shadow-sm border border-black/10 transition-transform hover:scale-[1.02] active:scale-95"
+                            style={{ 
+                              backgroundColor: entry.color,
+                              filter: 'saturate(1.8) contrast(1.1)',
+                              color: ['#fbbc05', '#ff6d01', '#ffffff', '#BAFFC9', '#FFFFBA', '#FFDFBA', '#FFB3BA'].includes(entry.color.toUpperCase()) ? '#000000' : '#ffffff'
+                            }}
                           >
                             <span className="truncate">{entry.title}{member ? ` · ${member.name}` : ""}</span>
-                            <span className="opacity-0 group-hover/entry:opacity-100 ml-1">Edit</span>
+                            <span className="opacity-0 group-hover/entry:opacity-100 ml-1 text-[8px] uppercase tracking-tighter">Edit</span>
                           </button>
                         );
                       })}
@@ -342,7 +364,7 @@ export default function TimetableView({ members }: { members: Member[] }) {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={closeEntryModal}>
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-sm font-black text-gray-800 uppercase mb-4">
-              {editingEntry ? "Edit timetable entry" : `Add to ${DAYS[showAdd?.day || 0]} at ${showAdd?.hour || 9}${(showAdd?.hour || 9) >= 12 ? "pm" : "am"}`}
+              {editingEntry ? "Edit timetable entry" : `Add to ${DAYS[showAdd?.day || 0]} at ${showAdd?.hour || 9}:${String(showAdd?.minute || 0).padStart(2, "0")}`}
             </h3>
             <form onSubmit={saveEntry} className="flex flex-col gap-3">
               <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Activity name..." className="text-sm bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20" autoFocus />

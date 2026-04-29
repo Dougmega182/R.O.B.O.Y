@@ -10,25 +10,19 @@ export async function POST(req: Request) {
     const file = formData.get("file");
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
+      return NextResponse.json({ error: "No image uploaded." }, { status: 400 });
     }
 
-    const fileExt = file.name.includes(".") ? file.name.split(".").pop() : "";
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}${fileExt ? `.${fileExt}` : ""}`;
+    const fileExt = file.name.includes(".") ? file.name.split(".").pop() : "png";
+    const fileName = `members/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
     const publicUrl = await uploadDocumentToStorage({
       fileName,
       content: file,
       contentType: file.type || "application/octet-stream",
     });
 
-    return NextResponse.json({
-      fileName,
-      publicUrl,
-    });
+    return NextResponse.json({ publicUrl });
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || "Upload failed." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message || "Avatar upload failed." }, { status: 500 });
   }
 }

@@ -99,7 +99,7 @@ export default function MealPlannerView() {
         setForm(prev => ({
           ...prev,
           name: data.name,
-          image_url: data.image_url || prev.image_url,
+          image_url: data.image || data.image_url || prev.image_url, // Support both keys
           notes: data.instructions || prev.notes,
           ingredients: data.ingredients || prev.ingredients
         }));
@@ -134,10 +134,36 @@ export default function MealPlannerView() {
   };
 
   const handleDeleteMeal = async (id: string) => {
-    if (!confirm("Delete this recipe?")) return;
+    if (!confirm("Remove this meal from your calendar?")) return;
     await fetch("/api/meals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", id }) });
     setSelectedMeal(null);
     loadMeals();
+  };
+
+  const handleDeleteRecipe = async (e: React.MouseEvent, id: string) => {
+    if (!id) return;
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to PERMANENTLY delete this recipe from your vault?")) return;
+    
+    console.log("Attempting to delete recipe:", id);
+    try {
+      const res = await fetch("/api/recipes", { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ action: "delete", id }) 
+      });
+      
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Delete failed");
+      
+      console.log("Delete successful");
+      setSelectedRecipe(null);
+      if (selectedMeal?.recipe_id === id) setSelectedMeal(null);
+      loadMeals();
+    } catch (err: any) {
+      console.error("Failed to delete recipe:", err);
+      alert(`Failed to delete recipe: ${err.message}`);
+    }
   };
 
   const handleAddIngredient = async () => {
@@ -156,6 +182,45 @@ export default function MealPlannerView() {
     loadMeals();
   };
 
+  const handleShoppingAdd = async () => {
+    const item = selectedRecipe || selectedMeal;
+    if (!item) return;
+
+    try {
+      // 1. Find a shopping list
+      const listsRes = await fetch("/api/lists");
+      const lists = await listsRes.json();
+      const shoppingList = lists.find((l: any) => 
+        l.name.toLowerCase().includes("shop") || 
+        l.name.toLowerCase().includes("grocer")
+      ) || lists[0];
+
+      if (!shoppingList) {
+        alert("Please create a Shopping List first!");
+        return;
+      }
+
+      // 2. Add the item
+      const res = await fetch(`/api/lists/${shoppingList.id}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: `Meal Shopping: ${item.name}` })
+      });
+
+      if (!res.ok) throw new Error("Failed to add to list");
+      alert(`Added "Meal Shopping: ${item.name}" to your ${shoppingList.name} list!`);
+    } catch (err) {
+      console.error("Failed to add to shopping list:", err);
+      alert("Failed to add to list.");
+    }
+  };
+
+  const handlePrint = () => {
+    const item = selectedRecipe || selectedMeal;
+    if (!item) return;
+    window.print();
+  };
+
   const weekLabel = `${weekDays[0].toLocaleDateString("en-AU", { day: "numeric", month: "short" })} — ${weekDays[6].toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}`;
   const [mode, setMode] = useState<"library" | "planner">("planner");
 
@@ -166,7 +231,7 @@ export default function MealPlannerView() {
   return (
     <div className="flex h-full bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative">
       {/* Sidebar */}
-      <div className="w-80 border-r border-gray-100 flex flex-col bg-gray-50/30">
+      <div className="w-80 border-r border-gray-100 flex flex-col bg-gray-50/30 print:hidden">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
              <h2 className="text-xl font-black text-gray-800">🍱 {mode === "library" ? "All recipes" : "Meal Slots"}</h2>
@@ -198,7 +263,15 @@ export default function MealPlannerView() {
                      )}
                   </div>
                   <div className="min-w-0 flex-1">
-                     <div className="text-[11px] font-black text-gray-800 leading-tight mb-1 group-hover:text-blue-600 transition-colors">{r.name}</div>
+                     <div className="flex items-start justify-between gap-2">
+                        <div className="text-[11px] font-black text-gray-800 leading-tight mb-1 group-hover:text-blue-600 transition-colors truncate">{r.name}</div>
+                        <button 
+                          onClick={(e) => handleDeleteRecipe(e, r.id)}
+                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                     </div>
                      <div className="text-[9px] font-bold text-gray-400 truncate uppercase tracking-tighter">
                         {r.recipe_url ? r.recipe_url.replace('https://','').replace('www.','').split('/')[0] : 'Manual Entry'}
                      </div>
@@ -226,7 +299,7 @@ export default function MealPlannerView() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col bg-white overflow-hidden">
         {mode === "planner" ? (
-          <div className="flex-1 flex flex-col h-full">
+          <div className="flex-1 flex flex-col h-full print:hidden">
             <div className="flex items-center justify-between px-10 py-8 border-b border-gray-50">
                <div>
                  <h2 className="text-3xl font-black text-gray-800 tracking-tight">{weekLabel}</h2>
@@ -295,22 +368,41 @@ export default function MealPlannerView() {
         ) : (
           <div className="flex-1 overflow-y-auto bg-white">
             {(selectedMeal || selectedRecipe) ? (
-              <div className="p-10 w-full">
+              <div className="p-10 w-full print:p-0">
                 {/* Title + Actions */}
-                <div className="flex items-start justify-between mb-8">
-                   <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-tight">
-                     {selectedRecipe?.name || selectedMeal?.name}
-                   </h1>
-                   <div className="flex items-center gap-2 shrink-0 ml-4">
-                      <button className="p-2 text-gray-300 hover:text-blue-500 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
-                      <button className="p-2 text-gray-300 hover:text-emerald-500 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg></button>
-                      <button className="p-2 text-gray-300 hover:text-gray-800 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg></button>
-                      <button className="p-2 text-gray-300 hover:text-rose-500 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button>
-                      <div className="w-px h-5 bg-gray-100 mx-1" />
-                      <button onClick={() => selectedMeal ? handleDeleteMeal(selectedMeal.id) : null} className="p-2 text-gray-300 hover:text-rose-500 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
-                      <button onClick={() => setMode("planner")} className="p-2 text-gray-300 hover:text-gray-800 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                   </div>
-                </div>
+                <div className="flex items-start justify-between mb-8 print:hidden">
+                    <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-tight">
+                      {selectedRecipe?.name || selectedMeal?.name}
+                    </h1>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                       <button className="p-2 text-gray-300 hover:text-blue-500 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg></button>
+                       <button onClick={handleShoppingAdd} className="p-2 text-gray-300 hover:text-emerald-500 transition-colors" title="Add to Shopping List">
+                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                       </button>
+                       <button onClick={handlePrint} className="p-2 text-gray-300 hover:text-gray-800 transition-colors" title="Print Recipe">
+                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                       </button>
+                       <button className="p-2 text-gray-300 hover:text-rose-500 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button>
+                       <div className="w-px h-5 bg-gray-100 mx-1" />
+                       <button 
+                         onClick={() => {
+                           if (selectedMeal) handleDeleteMeal(selectedMeal.id);
+                           else if (selectedRecipe) handleDeleteRecipe({ stopPropagation: () => {} } as any, selectedRecipe.id);
+                         }} 
+                         className="p-2 text-gray-300 hover:text-rose-500 transition-colors"
+                         title={selectedMeal ? "Remove from Calendar" : "Delete from Library"}
+                       >
+                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                       </button>
+                       <button onClick={() => setMode("planner")} className="p-2 text-gray-300 hover:text-gray-800 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                    </div>
+                 </div>
+
+                 {/* Print Header (Visible only when printing) */}
+                 <div className="hidden print:block mb-10 border-b-4 border-black pb-4">
+                    <h1 className="text-4xl font-black uppercase mb-2">{selectedRecipe?.name || selectedMeal?.name}</h1>
+                    <div className="text-lg font-bold">R.O.B.O.Y Household Recipe Vault</div>
+                 </div>
 
                 {/* Image + Metadata Row */}
                 <div className="flex gap-8 mb-8">
@@ -361,7 +453,7 @@ export default function MealPlannerView() {
                            <p className="text-sm text-gray-400 italic">No ingredients listed.</p>
                          )}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 print:hidden">
                         <input 
                           type="text" 
                           placeholder="Add ingredient..." 

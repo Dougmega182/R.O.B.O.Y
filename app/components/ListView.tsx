@@ -92,28 +92,56 @@ export default function ListView() {
     e.preventDefault();
     if (!newItemText.trim() || !activeList) return;
 
-    await fetch(`/api/lists/${activeList}/items`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: newItemText }),
-    });
-
+    const tempId = Math.random().toString(36).substring(7);
+    const content = newItemText;
     setNewItemText("");
-    loadItems(activeList);
-    loadLists();
+
+    // Optimistic Add
+    setItems(prev => [{
+      id: tempId,
+      list_id: activeList,
+      content,
+      completed: false,
+      created_at: new Date().toISOString()
+    }, ...prev]);
+
+    try {
+      const res = await fetch(`/api/lists/${activeList}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: content }),
+      });
+      if (!res.ok) throw new Error("Add failed");
+      
+      // Refresh to get real ID
+      loadItems(activeList);
+      loadLists();
+    } catch (err) {
+      console.error(err);
+      loadItems(activeList);
+    }
   };
 
   const handleToggle = async (itemId: string, completed: boolean) => {
     if (!activeList) return;
 
-    await fetch(`/api/lists/${activeList}/items`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "toggle", itemId, completed: !completed }),
-    });
+    // Optimistic Toggle
+    setItems(prev => prev.map(item => item.id === itemId ? { ...item, completed: !completed } : item));
 
-    loadItems(activeList);
-    loadLists();
+    try {
+      const res = await fetch(`/api/lists/${activeList}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle", itemId, completed: !completed }),
+      });
+      if (!res.ok) throw new Error("Toggle failed");
+      
+      // Minor sync check
+      loadLists();
+    } catch (err) {
+      console.error(err);
+      loadItems(activeList);
+    }
   };
 
   const handleDeleteItem = async (itemId: string) => {

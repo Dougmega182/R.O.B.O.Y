@@ -8,6 +8,7 @@ type PlayingState = {
   albumArt: string;
   isPlaying: boolean;
   device?: string;
+  volumePercent?: number | null;
 };
 
 export default function SpotifySidebar() {
@@ -18,17 +19,12 @@ export default function SpotifySidebar() {
 
   const loadData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/spotify?_t=${Date.now()}`);
+      const res = await fetch(`/api/spotify?action=overview&_t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         setPlaying(data.playing || null);
-      }
-
-      const recentRes = await fetch(`/api/spotify?action=recently_played&_t=${Date.now()}`);
-      if (recentRes.ok) {
-        const recentData = await recentRes.json();
         const unique = Array.from(
-          new Map(recentData.map((item: any) => [item.track.id, item])).values()
+          new Map((data.recentlyPlayed || []).map((item: any) => [item.track.id, item])).values()
         );
         setRecentlyPlayed(unique.slice(0, 4) as any[]);
       }
@@ -41,7 +37,7 @@ export default function SpotifySidebar() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 10000);
+    const interval = setInterval(loadData, 15000);
     return () => clearInterval(interval);
   }, [loadData]);
 

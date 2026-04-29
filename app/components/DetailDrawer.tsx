@@ -3,6 +3,7 @@
 import { FeedItem, FeedStatus } from "@/lib/types/feed";
 import { Member } from "@/lib/members"; // 🚀 Fixed Import
 import { canApprove, canArchive } from "@/lib/auth/guards";
+import MemberAvatar from "./MemberAvatar";
 
 export default function DetailDrawer({
   item,
@@ -46,9 +47,7 @@ export default function DetailDrawer({
         <div className="p-8 flex-1 overflow-y-auto">
           
           <div className="flex items-center gap-4 mb-8">
-            <div className={`w-12 h-12 rounded-full ${item.color || 'bg-pink-500'} text-white flex items-center justify-center font-bold text-lg`}>
-              {item.avatar}
-            </div>
+            <MemberAvatar avatar={item.avatar} color={item.color || "bg-pink-500"} className="w-12 h-12 rounded-full" textClassName="font-bold text-lg" alt={item.actor} />
             <div>
               <div className="font-bold text-gray-900 text-lg">{item.actor}</div>
               <div className="text-sm text-gray-400">{item.time} Today</div>

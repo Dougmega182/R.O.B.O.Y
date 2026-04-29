@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { Member } from "@/lib/members";
+import MemberAvatar from "./MemberAvatar";
 
 type Conversation = {
   id: string;
@@ -82,18 +83,32 @@ export default function MessageCenterView({ members, initialConvId }: { members:
     e.preventDefault();
     if (!content.trim() || !selectedConvId || !currentSenderId) return;
 
-    await fetch("/api/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content,
-        member_id: currentSenderId,
-        conversation_id: selectedConvId
-      })
-    });
-
+    const currentContent = content;
     setContent("");
-    loadMessages();
+
+    try {
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: currentContent,
+          member_id: currentSenderId,
+          conversation_id: selectedConvId
+        })
+      });
+
+      if (!res.ok) throw new Error("Failed to send");
+
+      const newMessage = await res.json();
+      
+      // Update local messages immediately so it doesn't "disappear" during the next load
+      setMessages(prev => [...prev, newMessage]);
+    } catch (err) {
+      console.error("Message send failed:", err);
+      // Optional: restore content if it failed
+      setContent(currentContent);
+      loadMessages();
+    }
   };
 
   const handleCreateConv = async (e: React.FormEvent) => {
@@ -155,9 +170,7 @@ export default function MessageCenterView({ members, initialConvId }: { members:
                   <div className="flex items-center gap-3">
                     <div className="flex -space-x-2">
                       {conv.conversation_participants.slice(0, 3).map((p, i) => (
-                        <div key={i} className={`w-6 h-6 rounded-full border-2 border-white ${p.household_members.color} flex items-center justify-center text-[8px] text-white font-bold`}>
-                          {p.household_members.avatar}
-                        </div>
+                        <MemberAvatar avatar={p.household_members.avatar} color={p.household_members.color} className="w-6 h-6 rounded-full border-2 border-white" textClassName="text-[8px] font-bold" alt={p.household_members.name} />
                       ))}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -184,9 +197,7 @@ export default function MessageCenterView({ members, initialConvId }: { members:
                  <div className="text-sm font-black text-gray-800">{selectedConv.name}</div>
                  <div className="flex items-center -space-x-1">
                    {selectedConv.conversation_participants.map(p => (
-                     <div key={p.member_id} className={`w-5 h-5 rounded-full border border-white ${p.household_members.color} flex items-center justify-center text-[7px] text-white font-black`} title={p.household_members.name}>
-                       {p.household_members.avatar}
-                     </div>
+                     <MemberAvatar avatar={p.household_members.avatar} color={p.household_members.color} className="w-5 h-5 rounded-full border border-white" textClassName="text-[7px] font-black" alt={p.household_members.name} />
                    ))}
                  </div>
               </div>
@@ -195,9 +206,7 @@ export default function MessageCenterView({ members, initialConvId }: { members:
             <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
               {messages.map(m => (
                 <div key={m.id} className={`flex items-start gap-3 ${m.member_id === currentSenderId ? 'flex-row-reverse' : ''}`}>
-                  <div className={`w-8 h-8 rounded-full ${m.household_members.color} text-white flex items-center justify-center font-bold text-xs shadow-sm shrink-0`}>
-                    {m.household_members.avatar}
-                  </div>
+                  <MemberAvatar avatar={m.household_members.avatar} color={m.household_members.color} className="w-8 h-8 rounded-full shadow-sm shrink-0" textClassName="font-bold text-xs" alt={m.household_members.name} />
                   <div className={`max-w-[70%] ${m.member_id === currentSenderId ? 'items-end' : 'items-start'} flex flex-col`}>
                     <div className="flex items-center gap-2 mb-1 px-1">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{m.household_members.name}</span>
@@ -230,7 +239,7 @@ export default function MessageCenterView({ members, initialConvId }: { members:
                         }`}
                         title={m.name}
                      >
-                       {m.avatar}
+                       <MemberAvatar avatar={m.avatar} color={m.color} className="w-10 h-10 rounded-xl" textClassName="text-lg" alt={m.name} />
                      </button>
                    ))}
                  </div>
@@ -295,7 +304,7 @@ export default function MessageCenterView({ members, initialConvId }: { members:
                              : 'bg-gray-50 border-gray-100 hover:bg-gray-100'
                          }`}
                        >
-                         <div className={`w-8 h-8 rounded-lg ${m.color} text-white flex items-center justify-center font-bold text-xs shadow-sm`}>{m.avatar}</div>
+                         <MemberAvatar avatar={m.avatar} color={m.color} className="w-8 h-8 rounded-lg shadow-sm" textClassName="font-bold text-xs" alt={m.name} />
                          <span className="text-xs font-black text-gray-700">{m.name}</span>
                        </button>
                      ))}

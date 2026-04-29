@@ -10,6 +10,8 @@ export async function POST(req: Request) {
       await adminSupabase.from("household_settings").delete().eq("key", "spotify_refresh_token");
     } else if (provider === 'google') {
       await adminSupabase.from("household_settings").delete().eq("key", "google_refresh_token");
+    } else if (provider === 'openai') {
+      await adminSupabase.from("household_settings").delete().eq("key", "openai_api_key");
     }
     
     return NextResponse.json({ success: true });

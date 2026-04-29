@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { Member } from "@/lib/members";
+import MemberAvatar from "./MemberAvatar";
 
 type Transaction = {
   id: string; description: string; amount: number; type: "income" | "expense";
@@ -101,9 +102,7 @@ export default function BudgetView({ members }: { members: Member[] }) {
           {memberStats.map(m => (
             <div key={m.id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow group">
                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-10 h-10 rounded-xl ${m.color} text-white flex items-center justify-center font-bold text-lg shadow-inner group-hover:scale-110 transition-transform`}>
-                    {m.avatar}
-                  </div>
+                  <MemberAvatar avatar={m.avatar} color={m.color} className="w-10 h-10 rounded-xl shadow-inner group-hover:scale-110 transition-transform" textClassName="font-bold text-lg" alt={m.name} />
                   <div>
                     <h4 className="font-black text-gray-800 text-sm">{m.name}</h4>
                     <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{m.role}</div>
@@ -251,9 +250,7 @@ export default function BudgetView({ members }: { members: Member[] }) {
                     
                     <div className="flex justify-center">
                        {member ? (
-                         <div className={`w-8 h-8 rounded-lg ${member.color} text-white flex items-center justify-center text-[10px] font-black shadow-sm`} title={member.name}>
-                           {member.avatar}
-                         </div>
+                         <MemberAvatar avatar={member.avatar} color={member.color} className="w-8 h-8 rounded-lg shadow-sm" textClassName="text-[10px] font-black" alt={member.name} />
                        ) : (
                          <div className="w-8 h-8 rounded-lg bg-slate-800 text-white flex items-center justify-center text-[10px] font-black shadow-sm" title="Household">
                            🏠

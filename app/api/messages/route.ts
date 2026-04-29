@@ -15,7 +15,10 @@ export async function GET(req: Request) {
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("GET /api/messages Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(data ?? []);
 }
 

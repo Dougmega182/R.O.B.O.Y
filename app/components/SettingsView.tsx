@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Member } from "@/lib/members";
 import ChoreLibrary from "./ChoreLibrary";
 import { createClient } from "@/lib/supabase/client";
+import MemberAvatar from "./MemberAvatar";
 
 export default function SettingsView({ onMembersChange }: { onMembersChange: () => void }) {
   const [members, setMembers] = useState<Member[]>([]);
@@ -25,6 +26,9 @@ export default function SettingsView({ onMembersChange }: { onMembersChange: () 
   const [name, setName] = useState("");
   const [role, setRole] = useState<"ADMIN" | "TEEN" | "CHILD">("CHILD");
   const [color, setColor] = useState("bg-blue-500");
+  const [avatarValue, setAvatarValue] = useState("");
+  const [avatarUploading, setAvatarUploading] = useState<string | null>(null);
+  const [openAiKey, setOpenAiKey] = useState("");
 
   const colors = [
     "bg-pink-500", "bg-blue-500", "bg-purple-500", "bg-emerald-500", 
@@ -80,7 +84,8 @@ export default function SettingsView({ onMembersChange }: { onMembersChange: () 
       const keys = settings.map(s => s.key);
       setTokenStatus({
         google: keys.includes('google_refresh_token'),
-        spotify: keys.includes('spotify_refresh_token')
+        spotify: keys.includes('spotify_refresh_token'),
+        openai: keys.includes('openai_api_key')
       });
     }
   };
@@ -152,18 +157,65 @@ export default function SettingsView({ onMembersChange }: { onMembersChange: () 
       const res = await fetch("/api/members", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, role, color }),
+        body: JSON.stringify({ name, role, color, avatar: avatarValue || undefined }),
       });
 
       if (!res.ok) throw new Error("Failed to add member");
 
       setName("");
+      setAvatarValue("");
       await refresh();
       onMembersChange();
     } catch (err) {
       alert("Error adding member");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const uploadAvatarFile = async (file: File) => {
+    const uploadForm = new FormData();
+    uploadForm.append("file", file);
+
+    const res = await fetch("/api/members/avatar", {
+      method: "POST",
+      body: uploadForm,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Avatar upload failed");
+    return data.publicUrl as string;
+  };
+
+  const handleNewAvatarUpload = async (file?: File | null) => {
+    if (!file) return;
+    setAvatarUploading("new");
+    try {
+      const publicUrl = await uploadAvatarFile(file);
+      setAvatarValue(publicUrl);
+    } catch (err: any) {
+      alert(err.message || "Avatar upload failed");
+    } finally {
+      setAvatarUploading(null);
+    }
+  };
+
+  const handleMemberAvatarUpload = async (memberId: string, file?: File | null) => {
+    if (!file) return;
+    setAvatarUploading(memberId);
+    try {
+      const publicUrl = await uploadAvatarFile(file);
+      const res = await fetch("/api/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_avatar", id: memberId, avatar: publicUrl }),
+      });
+      if (!res.ok) throw new Error("Failed to save avatar");
+      await refresh();
+      onMembersChange();
+    } catch (err: any) {
+      alert(err.message || "Avatar update failed");
+    } finally {
+      setAvatarUploading(null);
     }
   };
 
@@ -224,7 +276,7 @@ export default function SettingsView({ onMembersChange }: { onMembersChange: () 
     }
   };
 
-  const handleDisconnect = async (provider: 'spotify' | 'google') => {
+  const handleDisconnect = async (provider: 'spotify' | 'google' | 'openai') => {
     try {
       const res = await fetch("/api/settings/disconnect", {
         method: "POST",
@@ -237,6 +289,23 @@ export default function SettingsView({ onMembersChange }: { onMembersChange: () 
       }
     } catch (err) {
       console.error("Disconnect error:", err);
+    }
+  };
+
+  const handleSaveOpenAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!openAiKey.trim()) return;
+    try {
+      const res = await fetch("/api/settings/openai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: openAiKey.trim() }),
+      });
+      if (!res.ok) throw new Error("Failed to save OpenAI key");
+      setOpenAiKey("");
+      await loadIdentities();
+    } catch (err: any) {
+      alert(err.message || "Failed to save OpenAI key");
     }
   };
 
@@ -369,6 +438,44 @@ export default function SettingsView({ onMembersChange }: { onMembersChange: () 
                 </button>
               </div>
             </div>
+
+            <div className="flex items-center justify-between p-6 bg-gray-50 rounded-2xl border border-gray-100 mt-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-slate-900 text-white rounded-xl flex items-center justify-center text-xl shadow-sm">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3l7 4v10l-7 4-7-4V7l7-4z"></path><path d="M9 12h6"></path><path d="M12 9v6"></path></svg>
+                </div>
+                <div>
+                  <div className="font-bold text-gray-800 text-sm">OpenAI / ChatGPT</div>
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Connect in-app household AI chat</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {tokenStatus.openai && (
+                  <button onClick={() => handleDisconnect('openai')} className="px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 active:scale-95">
+                    Disconnect
+                  </button>
+                )}
+                <form onSubmit={handleSaveOpenAI} className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    value={openAiKey}
+                    onChange={(e) => setOpenAiKey(e.target.value)}
+                    placeholder={tokenStatus.openai ? "Replace API key" : "Paste OpenAI API key"}
+                    className="w-56 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                      tokenStatus.openai
+                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-slate-900 text-white hover:bg-black'
+                    }`}
+                  >
+                    {tokenStatus.openai ? 'Update Key' : 'Connect'}
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
       </section>
 
@@ -475,6 +582,40 @@ export default function SettingsView({ onMembersChange }: { onMembersChange: () 
             </div>
           </div>
 
+          <div className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+            <MemberAvatar
+              avatar={avatarValue || name.slice(0, 2)}
+              color={color}
+              className="w-14 h-14 rounded-2xl shadow-inner"
+              textClassName="text-sm font-black"
+              alt={name || "New member"}
+            />
+            <div className="flex-1">
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Profile Picture</div>
+              <div className="flex items-center gap-3">
+                <label className="cursor-pointer px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all">
+                  {avatarUploading === "new" ? "Uploading..." : avatarValue ? "Change Photo" : "Upload Photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleNewAvatarUpload(e.target.files?.[0])}
+                    disabled={avatarUploading === "new"}
+                  />
+                </label>
+                {avatarValue && (
+                  <button
+                    type="button"
+                    onClick={() => setAvatarValue("")}
+                    className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-100 transition-all"
+                  >
+                    Use Initials
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-col gap-4">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Theme Color</label>
             <div className="flex flex-wrap gap-3">
@@ -508,16 +649,29 @@ export default function SettingsView({ onMembersChange }: { onMembersChange: () 
           {members.map(member => (
             <div key={member.id} className="p-5 flex items-center justify-between group hover:bg-gray-50 transition-all">
               <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full ${member.color} text-white flex items-center justify-center font-bold text-sm shadow-inner`}>
-                  {member.avatar}
-                </div>
+                <MemberAvatar
+                  avatar={member.avatar}
+                  color={member.color}
+                  className="w-10 h-10 rounded-full shadow-inner"
+                  textClassName="text-sm font-bold"
+                  alt={member.name}
+                />
                 <div>
                   <div className="font-bold text-gray-800 text-sm">{member.name}</div>
                   <div className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{member.role}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button className="text-[10px] font-black text-gray-300 uppercase hover:text-blue-500 transition-colors">Edit</button>
+                <label className="cursor-pointer text-[10px] font-black text-gray-300 uppercase hover:text-blue-500 transition-colors">
+                  {avatarUploading === member.id ? "Uploading..." : "Photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleMemberAvatarUpload(member.id, e.target.files?.[0])}
+                    disabled={avatarUploading === member.id}
+                  />
+                </label>
                 <span className="text-gray-100">|</span>
                 <button onClick={() => handleDeleteMember(member.id)} className="text-[10px] font-black text-gray-300 uppercase hover:text-red-500 transition-colors">Delete</button>
               </div>

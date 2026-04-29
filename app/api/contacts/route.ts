@@ -1,6 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -23,6 +26,32 @@ export async function POST(req: Request) {
     const { error } = await supabase.from("contacts").delete().eq("id", body.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });
+  }
+
+  if (body.action === "update") {
+    const { data, error } = await supabase
+      .from("contacts")
+      .update({
+        name: body.name,
+        phone: body.phone,
+        email: body.email,
+        address: body.address,
+        category: body.category || "General",
+        notes: body.notes,
+        avatar_url: body.avatar_url,
+      })
+      .eq("id", body.id)
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message, details: error.details, hint: error.hint, code: error.code },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data);
   }
 
   const { data, error } = await supabase
