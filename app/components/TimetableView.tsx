@@ -29,8 +29,8 @@ type EntryForm = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const SLOTS = Array.from({ length: 16 * 4 }, (_, i) => {
-  const totalMinutes = (6 * 60) + (i * 15);
+const SLOTS = Array.from({ length: Math.ceil((16 * 60) / 25) }, (_, i) => {
+  const totalMinutes = (6 * 60) + (i * 25);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return { h, m };
@@ -267,8 +267,10 @@ export default function TimetableView({ members }: { members: Member[] }) {
     entries.filter((entry) => {
       if (entry.day_of_week !== day) return false;
       const [eh, em] = entry.start_time.split(":").map(Number);
-      // Entry matches this slot if it starts in this 15min window
-      return eh === h && em >= m && em < m + 15;
+      const entryTotal = (eh * 60) + em;
+      const slotTotal = (h * 60) + m;
+      // Entry matches this slot if it starts in this 25min window
+      return entryTotal >= slotTotal && entryTotal < slotTotal + 25;
     });
 
   return (
