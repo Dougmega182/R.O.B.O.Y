@@ -29,8 +29,8 @@ type EntryForm = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const SLOTS = Array.from({ length: Math.ceil((16 * 60) / 25) }, (_, i) => {
-  const totalMinutes = (6 * 60) + (i * 25);
+const SLOTS = Array.from({ length: Math.ceil((16 * 60) / 5) }, (_, i) => {
+  const totalMinutes = (6 * 60) + (i * 5);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return { h, m };
@@ -269,8 +269,8 @@ export default function TimetableView({ members }: { members: Member[] }) {
       const [eh, em] = entry.start_time.split(":").map(Number);
       const entryTotal = (eh * 60) + em;
       const slotTotal = (h * 60) + m;
-      // Entry matches this slot if it starts in this 25min window
-      return entryTotal >= slotTotal && entryTotal < slotTotal + 25;
+      // Entry matches this slot if it starts in this 5min window
+      return entryTotal >= slotTotal && entryTotal < slotTotal + 5;
     });
 
   return (
@@ -319,9 +319,9 @@ export default function TimetableView({ members }: { members: Member[] }) {
           <tbody>
             {SLOTS.map(({ h, m }) => (
               <tr key={`${h}:${m}`}>
-                <td className="p-1.5 border-r border-b border-gray-100 text-right align-middle">
-                  <span className={`text-[10px] font-bold ${m === 0 ? "text-gray-600" : "text-gray-300"}`}>
-                    {m === 0 ? (h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`) : `${h}:${m}`}
+                <td className="p-1 border-r border-b border-gray-100 text-right align-middle">
+                  <span className={`text-[9px] font-bold ${m === 0 ? "text-gray-900 text-[10px]" : m % 15 === 0 ? "text-gray-400" : "text-gray-200"}`}>
+                    {m === 0 ? (h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`) : (m % 15 === 0 ? `${h}:${m}` : "·")}
                   </span>
                 </td>
                 {DAYS.map((_, dayIndex) => {
