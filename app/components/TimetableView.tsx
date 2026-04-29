@@ -36,7 +36,7 @@ const SLOTS = Array.from({ length: Math.ceil((16 * 60) / 25) }, (_, i) => {
   return { h, m };
 });
 
-const COLORS = ["#4285f4", "#ea4335", "#34a853", "#fbbc05", "#ff6d01", "#46bdc6", "#7b1fa2", "#e91e63"];
+const COLORS = ["#EF4444", "#22C55E", "#F97316", "#3B82F6", "#EAB308", "#A855F7", "#06B6D4", "#EC4899"];
 
 const EMPTY_FORM: EntryForm = {
   title: "",
@@ -344,8 +344,7 @@ export default function TimetableView({ members }: { members: Member[] }) {
                             className="w-full text-left text-[10px] font-black px-2 py-1.5 rounded-lg mb-1 flex items-center justify-between group/entry shadow-sm border border-black/10 transition-transform hover:scale-[1.02] active:scale-95"
                             style={{ 
                               backgroundColor: entry.color,
-                              filter: 'saturate(1.8) contrast(1.1)',
-                              color: ['#fbbc05', '#ff6d01', '#ffffff', '#BAFFC9', '#FFFFBA', '#FFDFBA', '#FFB3BA'].includes(entry.color.toUpperCase()) ? '#000000' : '#ffffff'
+                              color: ['#FBBC05', '#FF6D01', '#FFFFFF', '#BAFFC9', '#FFFFBA', '#FFDFBA', '#FFB3BA', '#EAB308', '#F97316'].includes(entry.color.toUpperCase()) ? '#000000' : '#ffffff'
                             }}
                           >
                             <span className="truncate">{entry.title}{member ? ` · ${member.name}` : ""}</span>
