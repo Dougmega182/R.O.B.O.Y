@@ -35,17 +35,17 @@ const HOURS = Array.from({ length: 16 * 2 }, (_, i) => {
   const m = totalMinutes % 60;
   return { h, m };
 });
-const HOUR_HEIGHT = 160; // Increased height significantly to prevent overlap and show text
+const HOUR_HEIGHT = 160;
 
 const COLORS = [
-  "#dc2626", // Red 600
-  "#16a34a", // Green 600
-  "#ea580c", // Orange 600
-  "#2563eb", // Blue 600
-  "#ca8a04", // Yellow 600
-  "#9333ea", // Purple 600
-  "#0891b2", // Cyan 600
-  "#db2777", // Pink 600
+  "#FF0000", // Red
+  "#00AA00", // Green
+  "#FF8C00", // DarkOrange
+  "#0000FF", // Blue
+  "#DAA520", // GoldenRod
+  "#8B008B", // DarkMagenta
+  "#008B8B", // DarkCyan
+  "#C71585", // MediumVioletRed
 ];
 
 const EMPTY_FORM: EntryForm = {
@@ -359,34 +359,60 @@ export default function TimetableView({ members }: { members: Member[] }) {
                     ))}
 
                     {/* Entries Layer */}
-                    {!loading && dayEntries.map((entry) => {
-                      const { top, height } = calculatePosition(entry.start_time, entry.end_time);
-                      const isShort = height < 25;
+                    {!loading && (() => {
+                      const sorted = [...dayEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
+                      const columns: Entry[][] = [];
                       
-                      return (
-                        <button
-                          key={entry.id}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openEditModal(entry);
-                          }}
-                          className="absolute left-0.5 right-0.5 rounded-lg shadow-md border border-black/10 transition-transform hover:scale-[1.01] active:scale-95 z-10 overflow-hidden flex flex-col p-2"
-                          style={{ 
-                            top: top + 2, 
-                            height: height - 4,
-                            backgroundColor: entry.color,
-                            color: '#ffffff' // Force white text for better contrast on solid colors
-                          }}
-                        >
-                          <div className={`text-[10px] font-black truncate leading-tight ${isShort ? 'mb-0' : 'mb-1'}`}>
-                            {entry.title}
-                          </div>
-                          <div className={`text-[9px] font-bold opacity-90 ${isShort ? 'hidden' : 'block'}`}>
-                            {entry.start_time.slice(0, 5)} - {entry.end_time.slice(0, 5)}
-                          </div>
-                        </button>
+                      sorted.forEach(entry => {
+                        let placed = false;
+                        for (let i = 0; i < columns.length; i++) {
+                          const lastInCol = columns[i][columns[i].length - 1];
+                          if (entry.start_time >= lastInCol.end_time) {
+                            columns[i].push(entry);
+                            placed = true;
+                            break;
+                          }
+                        }
+                        if (!placed) columns.push([entry]);
+                      });
+
+                      const totalCols = columns.length;
+                      return columns.flatMap((col, colIndex) => 
+                        col.map(entry => {
+                          const { top, height } = calculatePosition(entry.start_time, entry.end_time);
+                          const isShort = height < 25;
+                          const width = 100 / totalCols;
+                          const left = colIndex * width;
+
+                          return (
+                            <button
+                              key={entry.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openEditModal(entry);
+                              }}
+                              className="absolute rounded-lg shadow-md border border-black/20 transition-all hover:scale-[1.01] active:scale-95 z-10 overflow-hidden flex flex-col p-2"
+                              style={{ 
+                                top: top + 2, 
+                                height: height - 4,
+                                left: `${left + 0.5}%`,
+                                width: `${width - 1}%`,
+                                backgroundColor: entry.color,
+                                color: '#ffffff',
+                                borderLeft: '4px solid rgba(0,0,0,0.2)'
+                              }}
+                            >
+                              <div className={`text-[10px] font-black truncate leading-tight ${isShort ? 'mb-0' : 'mb-1'}`}>
+                                {entry.title}
+                              </div>
+                              <div className={`text-[9px] font-bold opacity-90 ${isShort ? 'hidden' : 'block'}`}>
+                                {entry.start_time.slice(0, 5)} - {entry.end_time.slice(0, 5)}
+                              </div>
+                            </button>
+                          );
+                        })
                       );
-                    })}
+                    })()}
                   </td>
                 );
               })}
